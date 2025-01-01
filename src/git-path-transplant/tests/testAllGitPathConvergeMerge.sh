@@ -21,6 +21,9 @@ testAllGitPathConvergeMerge() {
     "testFullSyncCircle"
     "testAtomicSyncFailure"
     "testUltimateSync"
+
+    # as an orphan we add it here as it is closely related
+    "testGitTransplantWorkflow"
   )
   
   local ignored_tests=()
