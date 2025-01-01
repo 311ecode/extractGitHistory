@@ -12,18 +12,17 @@ git_path_move() {
     return 1
   fi
 
-  # 1. Resolve Absolute Paths and Normalize
+  # 1. Resolve Absolute Paths
   local abs_from_path
   abs_from_path=$(mkdir -p "$(dirname "$from_path")" && cd "$(dirname "$from_path")" && pwd)/$(basename "$from_path")
   abs_from_path=$(realpath -m "$abs_from_path")
   
   local to_dir_part=$(dirname "$to_path")
-  local to_base_part=$(basename "$to_path")
   mkdir -p "$to_dir_part"
-  local abs_to_path=$(cd "$to_dir_part" && pwd)/"$to_base_part"
+  local abs_to_path=$(cd "$to_dir_part" && pwd)/$(basename "$to_path")
   abs_to_path=$(realpath -m "$abs_to_path")
 
-  # 2. Identify Context and Repo Roots
+  # 2. Identify Source Repo Root
   local search_dir="$abs_from_path"
   [[ ! -d "$search_dir" ]] && search_dir=$(dirname "$search_dir")
   local source_repo_root=""
@@ -39,24 +38,21 @@ git_path_move() {
 
   # 3. Extract History
   local meta_file
-  meta_file=$(extract_git_path "$abs_from_path")
-  [[ $? -ne 0 || ! -f "$meta_file" ]] && return 1
+  meta_file=$(extract_git_path "$abs_from_path") || return 1
 
-  # Resolve destination relative to its own repo root
-  local dest_search_dir="$abs_to_path"
-  [[ ! -d "$dest_search_dir" ]] && dest_search_dir=$(dirname "$dest_search_dir")
-  local dest_repo_root=""
-  while [[ "$dest_search_dir" != "/" ]]; do
-    [[ -d "$dest_search_dir/.git" ]] && dest_repo_root="$dest_search_dir" && break
-    dest_search_dir="$(dirname "$dest_search_dir")"
-  done
-
+  # 4. Identify Destination Repo Root
+  local dest_repo_root
+  dest_repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
+  
   local rel_dest_path="${abs_to_path#$dest_repo_root/}"
   rel_dest_path="${rel_dest_path#/}"
 
-  # 4. Transplant with Hook Propagation
-  local effective_cleanse="$use_cleanse"
-  [[ "$act_like_cp" == "1" ]] && effective_cleanse="0"
+  # 5. Transplant
+  # We only allow effective cleanse if we are in the same repo
+  local effective_cleanse="0"
+  if [[ "$source_repo_root" == "$dest_repo_root" && "$act_like_cp" != "1" ]]; then
+    effective_cleanse="$use_cleanse"
+  fi
 
   ( 
     export GIT_PATH_TRANSPLANT_USE_CLEANSE="$effective_cleanse"
@@ -64,14 +60,21 @@ git_path_move() {
     cd "$dest_repo_root" && git_path_transplant "$meta_file" "$rel_dest_path" 
   ) || return 1
 
-  # 5. Local Cleanup (Filesystem only)
-  if [[ "$source_repo_root" == "$dest_repo_root" && "$act_like_cp" != "1" ]]; then
-    cd "$dest_repo_root" || return 1
-    if [[ -e "$abs_from_path" ]]; then
-      # If history wasn't scrubbed by a hook failure, we still remove the file pointer
-      rm -rf "$abs_from_path"
-      git rm -rf "$abs_from_path" &>/dev/null || true
+  # 6. Safety-First Cleanup Logic
+  # CRITICAL FIX: Only remove source if it is in the SAME repo and not in CP mode
+  if [[ "$source_repo_root" == "$dest_repo_root" ]]; then
+    if [[ "$act_like_cp" != "1" ]]; then
+      if [[ "$effective_cleanse" == "1" ]]; then
+         # Handled by git-cleanse inside transplant
+         : 
+      else
+        # Standard move: remove the source folder/file
+        rm -rf "$abs_from_path"
+        git rm -rf "$abs_from_path" &>/dev/null || true
+      fi
     fi
+  else
+    echo "📦 Inter-repo move detected: Source preserved for safety."
   fi
 
   rm -rf "$(dirname "$meta_file")"

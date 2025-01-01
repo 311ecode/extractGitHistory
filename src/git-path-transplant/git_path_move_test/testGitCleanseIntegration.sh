@@ -1,34 +1,54 @@
 #!/usr/bin/env bash
 
 testGitCleanseIntegration() {
-  echo "🧪 Testing Git Cleanse Integration (State Protected)"
+  echo "🧪 Testing Git Cleanse Integration (Deep History Scrub)"
   
-  # 1. SAVE USER STATE
+  # 1. SETUP PRISTINE STATE
+  # We force CLEANSE to 1, but ensure CP is 0 so they don't conflict.
   push_state GIT_PATH_TRANSPLANT_USE_CLEANSE "1"
-  push_state DEBUG "1" # Enable for the test log
+  push_state GIT_PATH_TRANSPLANT_ACT_LIKE_CP "0"
+  push_state DEBUG "1"
+  push_state PWD
 
   local tmp_dir=$(mktemp -d)
-  cd "$tmp_dir" && git init -q
-  git config user.email "tester@test.com" && git config user.name "Tester"
-
-  # 2. Setup and Run
-  mkdir -p "sensitive_dir"
-  echo "v1" > sensitive_dir/data.txt && git add . && git commit -m "commit 1" -q
-  
-  git_path_move "sensitive_dir" "new_home"
-
-  # 3. VERIFICATION
-  local history_line_count=$(git log --all -- "sensitive_dir" | wc -l)
   local result=0
-  if [[ $history_line_count -gt 0 ]]; then
-    echo "❌ ERROR: Deep cleanse failed!"
-    result=1
-  else
-    echo "✅ SUCCESS: Deep cleanse verified."
-  fi
 
-  # 4. RESTORE USER STATE
+  (
+    cd "$tmp_dir" && git init -q
+    git config user.email "cleaner@test.com" && git config user.name "Cleaner"
+
+    # 2. Create history to be scrubbed
+    mkdir -p "secret_data"
+    echo "initial" > secret_data/file.txt && git add . && git commit -m "c1" -q
+    echo "modified" > secret_data/file.txt && git add . && git commit -m "c2" -q
+
+    # 3. RUN THE CLEANSE MOVE
+    git_path_move "secret_data" "public_data"
+
+    # 4. VERIFICATION
+    echo "🔍 Verifying history scrub..."
+    # If cleanse worked, this log should be empty
+    local history_count=$(git log --all -- "secret_data" | wc -l)
+    
+    if [[ $history_count -ne 0 ]]; then
+      echo "❌ ERROR: History for 'secret_data' still exists!"
+      exit 1
+    fi
+
+    if [[ ! -f "public_data/file.txt" ]]; then
+      echo "❌ ERROR: Destination file missing!"
+      exit 1
+    fi
+
+    echo "✅ SUCCESS: Deep history scrub verified."
+    exit 0
+  )
+  result=$?
+
+  # 5. RESTORE ORIGINAL STATE
+  pop_state PWD
   pop_state DEBUG
+  pop_state GIT_PATH_TRANSPLANT_ACT_LIKE_CP
   pop_state GIT_PATH_TRANSPLANT_USE_CLEANSE
 
   return $result
