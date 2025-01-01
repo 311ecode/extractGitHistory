@@ -1,31 +1,15 @@
 #!/usr/bin/env bash
 
 # REAL-WORLD HOOK EXAMPLE: Checks if source and dest match in file size
-check_size_parity_hook() {
-  local src="$1"
-  local dst="$2"
-  
-  echo "🔍 Hook: Validating size parity between $src and $dst"
-  
-  local src_size=$(du -sb "$src" | cut -f1)
-  local dst_size=$(du -sb "$dst" | cut -f1)
-  
-  if [[ "$src_size" == "$dst_size" ]]; then
-    echo "✅ Hook: Sizes match ($src_size bytes). Proceeding."
-    return 0
-  else
-    echo "❌ Hook: SIZE MISMATCH! (Src: $src_size, Dst: $dst_size)"
-    return 1
-  fi
-}
+
 
 testCleanseHookParity() {
   echo "🧪 Testing Cleanse Hook with Parity Check"
   
   # Protect user env
   push_state GIT_PATH_TRANSPLANT_USE_CLEANSE "1"
-  push_state GIT_PATH_TRANSPLANT_CLEANSE_HOOK "check_size_parity_hook"
-  export -f check_size_parity_hook
+  push_state GIT_PATH_TRANSPLANT_CLEANSE_HOOK "testCleanseHookParity_check_size_parity_hook"
+  export -f testCleanseHookParity_check_size_parity_hook
 
   local tmp_dir=$(mktemp -d)
   local result=0
@@ -55,6 +39,6 @@ testCleanseHookParity() {
 
   pop_state GIT_PATH_TRANSPLANT_CLEANSE_HOOK
   pop_state GIT_PATH_TRANSPLANT_USE_CLEANSE
-  unset -f check_size_parity_hook
+  unset -f testCleanseHookParity_check_size_parity_hook
   return $result
 }

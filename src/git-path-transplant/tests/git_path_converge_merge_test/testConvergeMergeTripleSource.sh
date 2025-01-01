@@ -1,10 +1,9 @@
-#!/usr/bin/env bash
-
 testConvergeMergeTripleSource() {
   echo "🧪 Testing Triple-Source Convergent Merge (Scale & Integrity)"
   
   push_state DEBUG "1"
   push_state PWD
+  push_state GIT_PATH_TRANSPLANT_USE_CLEANSE "0"
 
   local tmp_dir=$(mktemp -d)
   local result=0
@@ -33,7 +32,7 @@ testConvergeMergeTripleSource() {
     git config user.email "monorepo@test.com" && git config user.name "Mono"
     git commit --allow-empty -m "root" -q
 
-    # 4. Execute Converge
+    # 4. Execute Converge (Now using memory functions)
     echo "🚀 Converging 3 sources..."
     git_path_converge_merge "merged_app" "$tmp_dir/repoA" "$tmp_dir/repoB" "$tmp_dir/repoC"
 
@@ -46,10 +45,9 @@ testConvergeMergeTripleSource() {
       fi
     done
 
-    # Verify all 3 unique feature commits are in the history
     local log_count=$(git log --oneline -- merged_app | grep -E "feat: source (A|B|C)" | wc -l)
     if [[ $log_count -lt 3 ]]; then
-      echo "❌ ERROR: History missing one or more source commits (found $log_count/3)"
+      echo "❌ ERROR: History missing source commits (found $log_count/3)"
       exit 1
     fi
 
@@ -59,6 +57,7 @@ testConvergeMergeTripleSource() {
   result=$?
   rm -rf "$tmp_dir"
 
+  pop_state GIT_PATH_TRANSPLANT_USE_CLEANSE
   pop_state PWD
   pop_state DEBUG
   return $result
