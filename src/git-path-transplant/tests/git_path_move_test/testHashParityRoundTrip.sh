@@ -32,14 +32,16 @@ testHashParityRoundTrip() {
 
         # 3. Transplant & Re-extract
         local meta=$(extract_git_path "$tmp_dir/orig/file.txt") || exit 1
-        git_path_transplant "$meta" "moved/here" || exit 1
+        
+        # FIX: Explicitly target the full file path.
+        # Previously "moved/here" treated 'here' as the filename.
+        git_path_transplant "$meta" "moved/here/file.txt" || exit 1
 
         local second_meta=$(extract_git_path "$monorepo_root/moved/here/file.txt") || exit 1
         local final_repo=$(jq -r '.extracted_repo_path' "$second_meta")
         cd "$final_repo" || exit 1
 
         # FIX: Find the commit that specifically matches our content, not just HEAD
-        # In a 1-file extracted repo, it should be the only commit with "fix: logic"
         local target_commit=$(git log --all --grep="fix: logic" --format=%H -n 1)
         local final_commit_info=$(git show --format='%s%n%an <%ae>%n%ai' "$target_commit")
         local final_tree=$(git rev-parse "$target_commit^{tree}")
@@ -49,6 +51,8 @@ testHashParityRoundTrip() {
             exit 0
         else
             echo "❌ ERROR: Parity check failed!"
+            echo "Original: $orig_commit_info"
+            echo "Final:    $final_commit_info"
             exit 1
         fi
     )
