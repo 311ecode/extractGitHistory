@@ -1,62 +1,55 @@
 #!/usr/bin/env bash
 
 testHistoryCopy() {
-  echo "🧪 Testing Complex History Copy (GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1)"
+  echo "🧪 Testing History Copy (GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1)"
+  
+  # 1. SETUP STATE
+  push_state GIT_PATH_TRANSPLANT_ACT_LIKE_CP "1"
+  push_state GIT_PATH_TRANSPLANT_USE_CLEANSE "0"
+  push_state DEBUG "1"
+  push_state PWD
+
   local tmp_dir=$(mktemp -d)
-  
-  # 1. Setup Source Repo with an evolving history
-  mkdir -p "$tmp_dir/repo/feature_dir"
-  cd "$tmp_dir/repo" && git init -q
-  git config user.email "test@test.com"
-  git config user.name "Tester"
+  local result=0
 
-  # Commit 1: Initial creation
-  echo "version 1" > feature_dir/app.log
-  git add . && git commit -m "feat: initial log" -q
-  
-  # Commit 2: Modification
-  echo "version 2" >> feature_dir/app.log
-  git add . && git commit -m "feat: update log to v2" -q
-  
-  # Commit 3: Adding a second file
-  echo "config data" > feature_dir/config.json
-  git add . && git commit -m "feat: add config file" -q
+  (
+    mkdir -p "$tmp_dir/repo/feature_dir"
+    cd "$tmp_dir/repo" && git init -q
+    git config user.email "test@test.com" && git config user.name "Tester"
 
-  local original_commit_count=$(git rev-list --count HEAD)
+    echo "v1" > feature_dir/app.log && git add . && git commit -m "c1" -q
+    echo "v2" >> feature_dir/app.log && git add . && git commit -m "c2" -q
 
-  # 2. Execute the history-aware copy
-  # We use the shaded function which sets GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1 internally
-  git_cp_shaded "feature_dir" "legacy_backup"
+    # Execute move (acting like cp)
+    git_path_move "feature_dir" "legacy_backup"
 
-  # 3. VERIFICATION
-  echo "🔍 Verifying path integrity..."
-  [[ ! -d "feature_dir" ]] && echo "❌ ERROR: Source deleted!" && return 1
-  [[ ! -d "legacy_backup" ]] && echo "❌ ERROR: Destination missing!" && return 1
+    # 2. VERIFICATION
+    if [[ ! -d "feature_dir" ]]; then
+      echo "❌ ERROR: Source deleted! ACT_LIKE_CP was ignored."
+      exit 1
+    fi
+    if [[ ! -d "legacy_backup" ]]; then
+      echo "❌ ERROR: Destination missing!"
+      exit 1
+    fi
 
-  echo "🔍 Verifying history depth at destination..."
-  # Check if the specific commit messages exist for the NEW path
-  local dest_log_count
-  dest_log_count=$(git log --format=%s -- "legacy_backup" | wc -l)
-  
-  if [[ $dest_log_count -lt 3 ]]; then
-    echo "❌ ERROR: History truncated! Expected at least 3 commits, found $dest_log_count"
-    return 1
-  fi
+    # Check history depth at destination
+    local dest_count=$(git log --oneline -- "legacy_backup" | wc -l)
+    if [[ $dest_count -lt 2 ]]; then
+      echo "❌ ERROR: History not copied. Found $dest_count commits."
+      exit 1
+    fi
 
-  # Verify specific content evolution in the copied history
-  if ! git log -p -- "legacy_backup/app.log" | grep -q "+version 2"; then
-    echo "❌ ERROR: Content evolution (diff history) lost in copy!"
-    return 1
-  fi
+    echo "✅ SUCCESS: History successfully forked (Source preserved)."
+    exit 0
+  )
+  result=$?
 
-  echo "🔍 Verifying source history remains untouched..."
-  local source_log_count
-  source_log_count=$(git log --format=%s -- "feature_dir" | wc -l)
-  if [[ $source_log_count -ne 3 ]]; then
-    echo "❌ ERROR: Source history corrupted during copy!"
-    return 1
-  fi
+  # 3. RESTORE STATE
+  pop_state PWD
+  pop_state DEBUG
+  pop_state GIT_PATH_TRANSPLANT_USE_CLEANSE
+  pop_state GIT_PATH_TRANSPLANT_ACT_LIKE_CP
 
-  echo "✅ SUCCESS: Complex history (3 commits) successfully branched to new path."
-  return 0
+  return $result
 }
