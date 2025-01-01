@@ -1,30 +1,40 @@
 #!/usr/bin/env bash
-
 git_mv_shaded() {
-  # 1. Bypass if flags are detected or argument count is not exactly 2
-  local has_flags=0
-  for arg in "$@"; do
-    [[ "$arg" == -* ]] && has_flags=1 && break
-  done
+  # ───────────────────────────────────────────────────────────────
+  # Safety-first version – only intercept the most obvious case
+  # Everything else → plain old mv
+  # ───────────────────────────────────────────────────────────────
 
-  if [[ $# -ne 2 || $has_flags -eq 1 ]]; then
-    if git rev-parse --is-inside-work-tree &>/dev/null; then
-      command git mv "$@"
-    else
-      command mv "$@"
-    fi
+  # 1. Quick bypass for anything that looks non-trivial
+  if [[ $# -ne 2 ]]; then
+    command mv "$@"
     return $?
   fi
+
+  # 2. Check for any flag-like argument
+  for arg in "$@"; do
+    if [[ $arg == -* ]]; then
+      command mv "$@"
+      return $?
+    fi
+  done
 
   local src="$1"
   local dst="$2"
 
-  # 2. Logic Gate: If in Git, use history-preserving move
-  if git rev-parse --is-inside-work-tree &>/dev/null; then
-    # We call the existing git_path_move from your library
-    git_path_move "$src" "$dst"
-  else
-    # Fallback for non-git environments
+  # 3. Only now: are we in a git repo?
+  if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
     command mv "$src" "$dst"
+    return $?
   fi
+
+  # 4. Final safety: do both paths look reasonable? (no leading dash, not empty)
+  if [[ -z $src || -z $dst || $src == -* || $dst == -* ]]; then
+    command mv "$src" "$dst"
+    return $?
+  fi
+
+  # ── Only reach here for the clean, simple, safe case ──
+  echo "→ Using history-preserving move: $src → $dst" >&2
+  git_path_move "$src" "$dst"
 }
