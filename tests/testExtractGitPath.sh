@@ -1,24 +1,8 @@
 #!/usr/bin/env bash
 # Test suite for extract-git-path.sh
 
-
 testExtractGitPath() {
   export LC_NUMERIC=C
-
-  # Nested test functions
-  
-
-  
-
-  
-
-  
-
-  
-
-  
-
-  
 
   # Test registry
   local test_functions=(
@@ -29,6 +13,7 @@ testExtractGitPath() {
     "testHistoryFlattened"
     "testMultipleCommits"
     "testRepoRoot"
+    "testCommitMappings"
   )
 
   local ignored_tests=()

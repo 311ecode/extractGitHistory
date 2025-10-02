@@ -16,27 +16,31 @@ testRepoRoot() {
     git commit -m "Initial commit" >/dev/null 2>&1
     
     # Extract entire repo
-    local output=$(extract_git_path "$test_repo")
+    local stderr_capture=$(mktemp)
+    local meta_file
+    meta_file=$(extract_git_path "$test_repo" 2>"$stderr_capture")
     local exit_code=$?
+    local repo_path=$(tail -1 "$stderr_capture")  # Get only last line
+    rm -f "$stderr_capture"
     
     # Cleanup test repo
     rm -rf "$test_repo"
     
     if [[ $exit_code -ne 0 ]]; then
       echo "ERROR: Function failed"
-      rm -rf "$output" 2>/dev/null
+      [[ -n "$meta_file" ]] && rm -rf "$(dirname "$meta_file")" 2>/dev/null
       return 1
     fi
     
     # Verify structure preserved
-    if [[ ! -f "$output/file.txt" ]] || [[ ! -f "$output/subdir/nested.txt" ]]; then
+    if [[ ! -f "$repo_path/file.txt" ]] || [[ ! -f "$repo_path/subdir/nested.txt" ]]; then
       echo "ERROR: Full repo structure not preserved"
-      rm -rf "$output"
+      rm -rf "$(dirname "$meta_file")"
       return 1
     fi
     
     # Cleanup
-    rm -rf "$output"
+    rm -rf "$(dirname "$meta_file")"
     
     echo "SUCCESS: Entire repo extraction works"
     return 0

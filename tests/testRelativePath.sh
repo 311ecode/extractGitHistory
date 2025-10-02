@@ -16,26 +16,30 @@ testRelativePath() {
     
     # Extract with relative path
     cd "$test_repo"
-    local output=$(extract_git_path "src/subproject")
+    local stderr_capture=$(mktemp)
+    local meta_file
+    meta_file=$(extract_git_path "src/subproject" 2>"$stderr_capture")
     local exit_code=$?
+    local repo_path=$(tail -1 "$stderr_capture")  # Get only last line
+    rm -f "$stderr_capture"
     
     # Cleanup test repo
     rm -rf "$test_repo"
     
     if [[ $exit_code -ne 0 ]]; then
       echo "ERROR: Function failed with exit code $exit_code"
-      rm -rf "$output" 2>/dev/null
+      [[ -n "$meta_file" ]] && rm -rf "$(dirname "$meta_file")" 2>/dev/null
       return 1
     fi
     
-    if [[ ! -d "$output" ]]; then
-      echo "ERROR: Output directory does not exist"
-      rm -rf "$output"
+    if [[ ! -d "$repo_path" ]]; then
+      echo "ERROR: Output directory does not exist: $repo_path"
+      rm -rf "$(dirname "$meta_file")"
       return 1
     fi
     
     # Cleanup
-    rm -rf "$output"
+    rm -rf "$(dirname "$meta_file")"
     
     echo "SUCCESS: Relative path extraction works"
     return 0
