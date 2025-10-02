@@ -1,83 +1,11 @@
 #!/usr/bin/env bash
-# Extract git history for a specific path, flattened to repo root
-
-# Extract git history for a path and output temp directory path
-# Usage: extract_git_path <path>
-# Returns: 0 on success, 1 on error
-# Stdout: Path to meta.json file
-# Stderr: Path to extracted repo (for development convenience)
-extract_git_path() {
-  local target_path="$1"
-  local abs_path
-  local repo_root
-  local rel_path
+extract_git_path_helper() {
+  local abs_path="$1"
+  local repo_root="$2"
+  local rel_path="$3"
   local temp_base
   local temp_dir
   local repo_dir
-
-  # Validate argument
-  if [[ $# -ne 1 ]]; then
-    echo "ERROR: Usage: extract_git_path <path>" >&2
-    return 1
-  fi
-
-  # Check dependencies
-  if ! command -v git >/dev/null 2>&1; then
-    echo "ERROR: git is not installed" >&2
-    return 1
-  fi
-
-  if ! command -v git-filter-repo >/dev/null 2>&1; then
-    echo "ERROR: git-filter-repo is not installed (install: pip install git-filter-repo)" >&2
-    return 1
-  fi
-
-  # Resolve to absolute path
-  if [[ "$target_path" = /* ]]; then
-    abs_path="$target_path"
-  else
-    abs_path="$(cd "$(dirname "$target_path")" 2>/dev/null && pwd)/$(basename "$target_path")"
-    if [[ $? -ne 0 ]]; then
-      echo "ERROR: Cannot resolve path: $target_path" >&2
-      return 1
-    fi
-  fi
-
-  [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Resolved path: $abs_path" >&2
-
-  # Find git repository root
-  local dir="$abs_path"
-  repo_root=""
-  while [[ "$dir" != "/" ]]; do
-    [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Checking for .git in: $dir" >&2
-    if [[ -d "$dir/.git" ]]; then
-      repo_root="$dir"
-      [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Found repo root: $repo_root" >&2
-      break
-    fi
-    dir="$(dirname "$dir")"
-  done
-
-  if [[ -z "$repo_root" ]]; then
-    echo "ERROR: Path is not inside a git repository: $abs_path" >&2
-    return 1
-  fi
-
-  # Calculate relative path from repo root
-  if [[ "$abs_path" = "$repo_root" ]]; then
-    rel_path="."
-  else
-    rel_path="${abs_path#$repo_root/}"
-  fi
-
-  [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Relative path: $rel_path" >&2
-
-  # Verify path exists in git history
-  cd "$repo_root" || return 1
-  if ! git log --oneline -- "$rel_path" | head -1 | grep -q .; then
-    echo "ERROR: Path has no git history (never tracked): $rel_path" >&2
-    return 1
-  fi
 
   # Get original commit hashes before extraction
   [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Collecting original commit metadata..." >&2
