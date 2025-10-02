@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testAbsolutePath() {
+test_extractGitPath_absolutePath() {
     echo "Testing extraction with absolute path"
     
     # Create test repo

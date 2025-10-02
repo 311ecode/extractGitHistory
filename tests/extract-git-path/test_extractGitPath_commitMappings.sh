@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testCommitMappings() {
+test_extractGitPath_commitMappings() {
     echo "Testing commit hash mappings in extract-git-path-meta.json"
     
     # Create test repo with multiple commits

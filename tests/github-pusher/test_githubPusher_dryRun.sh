@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testGithubPusher_DryRun() {
+test_githubPusher_dryRun() {
     echo "Testing dry-run mode"
     
     # Set dummy credentials for dry-run

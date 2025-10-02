@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testGithubPusher_MetaJsonParsing() {
+test_githubPusher_metaJsonParsing() {
     echo "Testing meta.json parsing"
     
     # Create test meta.json

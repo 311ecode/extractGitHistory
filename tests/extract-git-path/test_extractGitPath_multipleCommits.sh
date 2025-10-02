@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testMultipleCommits() {
+test_extractGitPath_multipleCommits() {
     echo "Testing extraction preserves commit history"
     
     # Create test repo with multiple commits

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testHistoryFlattened() {
+test_extractGitPath_historyFlattened() {
     echo "Testing that extracted history is flattened to root"
     
     # Create test repo with nested structure

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-testRelativePath() {
-    echo "Testing extraction with relative path"
+test_extractGitPath_repoRoot() {
+    echo "Testing extraction of entire repository (root path)"
     
     # Create test repo
     local test_repo=$(mktemp -d)
@@ -9,16 +9,16 @@ testRelativePath() {
     git config user.name "Test" >/dev/null 2>&1
     git config user.email "test@test.com" >/dev/null 2>&1
     
-    mkdir -p src/subproject
-    echo "content" > src/subproject/file.txt
+    echo "root file" > file.txt
+    mkdir subdir
+    echo "nested" > subdir/nested.txt
     git add . >/dev/null 2>&1
     git commit -m "Initial commit" >/dev/null 2>&1
     
-    # Extract with relative path
-    cd "$test_repo"
+    # Extract entire repo
     local stderr_capture=$(mktemp)
     local meta_file
-    meta_file=$(extract_git_path "src/subproject" 2>"$stderr_capture")
+    meta_file=$(extract_git_path "$test_repo" 2>"$stderr_capture")
     local exit_code=$?
     local repo_path=$(tail -1 "$stderr_capture")  # Get only last line
     rm -f "$stderr_capture"
@@ -27,7 +27,7 @@ testRelativePath() {
     rm -rf "$test_repo"
     
     if [[ $exit_code -ne 0 ]]; then
-      echo "ERROR: Function failed with exit code $exit_code"
+      echo "ERROR: Function failed"
       [[ -n "$meta_file" ]] && rm -rf "$(dirname "$meta_file")" 2>/dev/null
       return 1
     fi
@@ -39,8 +39,9 @@ testRelativePath() {
       return 1
     fi
     
-    if [[ ! -d "$repo_path" ]]; then
-      echo "ERROR: Output directory does not exist: $repo_path"
+    # Verify structure preserved
+    if [[ ! -f "$repo_path/file.txt" ]] || [[ ! -f "$repo_path/subdir/nested.txt" ]]; then
+      echo "ERROR: Full repo structure not preserved"
       rm -rf "$(dirname "$meta_file")"
       return 1
     fi
@@ -48,6 +49,6 @@ testRelativePath() {
     # Cleanup
     rm -rf "$(dirname "$meta_file")"
     
-    echo "SUCCESS: Relative path extraction works"
+    echo "SUCCESS: Entire repo extraction works"
     return 0
   }

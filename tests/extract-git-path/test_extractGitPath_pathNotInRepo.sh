@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testPathNotInRepo() {
+test_extractGitPath_pathNotInRepo() {
     echo "Testing error when path not in git repo"
     
     # Create temp dir in /tmp to avoid being in current git repo

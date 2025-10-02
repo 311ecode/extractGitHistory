@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testGithubPusher_RepoNameGeneration() {
+test_githubPusher_repoNameGeneration() {
     echo "Testing repository name generation"
     
     local test_dir=$(mktemp -d)
