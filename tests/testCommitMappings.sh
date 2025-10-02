@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 testCommitMappings() {
-    echo "Testing commit hash mappings in meta.json"
+    echo "Testing commit hash mappings in extract-git-path-meta.json"
     
     # Create test repo with multiple commits
     local test_repo=$(mktemp -d)
@@ -61,16 +61,23 @@ testCommitMappings() {
       return 1
     fi
     
-    if [[ -n "${DEBUG:-}" ]]; then
-      echo "DEBUG: meta.json contents:" >&2
-      cat "$meta_file" >&2
-      echo "" >&2
-      echo "DEBUG: Checking for commits in meta.json:" >&2
+    # Verify filename is extract-git-path-meta.json
+    if [[ "$(basename "$meta_file")" != "extract-git-path-meta.json" ]]; then
+      echo "ERROR: Expected extract-git-path-meta.json, got: $(basename "$meta_file")"
+      rm -rf "$(dirname "$meta_file")"
+      return 1
     fi
     
-    # Verify meta.json has commit_mappings
+    if [[ -n "${DEBUG:-}" ]]; then
+      echo "DEBUG: extract-git-path-meta.json contents:" >&2
+      cat "$meta_file" >&2
+      echo "" >&2
+      echo "DEBUG: Checking for commits in extract-git-path-meta.json:" >&2
+    fi
+    
+    # Verify extract-git-path-meta.json has commit_mappings
     if ! grep -q '"commit_mappings"' "$meta_file"; then
-      echo "ERROR: meta.json missing commit_mappings"
+      echo "ERROR: extract-git-path-meta.json missing commit_mappings"
       rm -rf "$(dirname "$meta_file")"
       return 1
     fi
@@ -114,6 +121,6 @@ testCommitMappings() {
     # Cleanup
     rm -rf "$(dirname "$meta_file")"
     
-    echo "SUCCESS: Commit mappings correctly generated"
+    echo "SUCCESS: Commit mappings correctly generated in extract-git-path-meta.json"
     return 0
   }

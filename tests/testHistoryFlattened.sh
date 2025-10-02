@@ -31,6 +31,13 @@ testHistoryFlattened() {
       return 1
     fi
     
+    # Verify filename is extract-git-path-meta.json
+    if [[ "$(basename "$meta_file")" != "extract-git-path-meta.json" ]]; then
+      echo "ERROR: Expected extract-git-path-meta.json, got: $(basename "$meta_file")"
+      rm -rf "$(dirname "$meta_file")"
+      return 1
+    fi
+    
     # Check that file is at root in extracted repo
     if [[ ! -f "$repo_path/file.txt" ]]; then
       echo "ERROR: File not flattened to root (expected file.txt at root)"

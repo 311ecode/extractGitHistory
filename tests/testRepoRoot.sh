@@ -32,6 +32,13 @@ testRepoRoot() {
       return 1
     fi
     
+    # Verify filename is extract-git-path-meta.json
+    if [[ "$(basename "$meta_file")" != "extract-git-path-meta.json" ]]; then
+      echo "ERROR: Expected extract-git-path-meta.json, got: $(basename "$meta_file")"
+      rm -rf "$(dirname "$meta_file")"
+      return 1
+    fi
+    
     # Verify structure preserved
     if [[ ! -f "$repo_path/file.txt" ]] || [[ ! -f "$repo_path/subdir/nested.txt" ]]; then
       echo "ERROR: Full repo structure not preserved"

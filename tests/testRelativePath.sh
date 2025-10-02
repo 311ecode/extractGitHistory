@@ -32,6 +32,13 @@ testRelativePath() {
       return 1
     fi
     
+    # Verify filename is extract-git-path-meta.json
+    if [[ "$(basename "$meta_file")" != "extract-git-path-meta.json" ]]; then
+      echo "ERROR: Expected extract-git-path-meta.json, got: $(basename "$meta_file")"
+      rm -rf "$(dirname "$meta_file")"
+      return 1
+    fi
+    
     if [[ ! -d "$repo_path" ]]; then
       echo "ERROR: Output directory does not exist: $repo_path"
       rm -rf "$(dirname "$meta_file")"

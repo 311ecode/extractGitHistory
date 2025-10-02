@@ -181,8 +181,8 @@ extract_git_path() {
     done
   fi
 
-  # Generate meta.json
-  local meta_file="$temp_dir/meta.json"
+  # Generate extract-git-path-meta.json
+  local meta_file="$temp_dir/extract-git-path-meta.json"
   local extraction_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
   cat > "$meta_file" <<EOF
@@ -217,7 +217,7 @@ EOF
   # Output repo path to stderr for development convenience
   echo "$repo_dir" >&2
 
-  # Output meta.json path to stdout
+  # Output extract-git-path-meta.json path to stdout
   echo "$meta_file"
   return 0
 }
