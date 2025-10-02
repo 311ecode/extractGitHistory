@@ -12,6 +12,7 @@ test_gitHistoryTools_extractGitPath() {
     "test_extractGitPath_multipleCommits"
     "test_extractGitPath_repoRoot"
     "test_extractGitPath_commitMappings"
+    "test_extractGitPath_syncStatusInitialized"
   )
 
   local ignored_tests=()
