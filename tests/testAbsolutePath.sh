@@ -32,7 +32,14 @@ testAbsolutePath() {
     fi
     
     if [[ ! -f "$meta_file" ]]; then
-      echo "ERROR: meta.json does not exist: $meta_file"
+      echo "ERROR: extract-git-path-meta.json does not exist: $meta_file"
+      return 1
+    fi
+    
+    # Verify it's the correct filename
+    if [[ "$(basename "$meta_file")" != "extract-git-path-meta.json" ]]; then
+      echo "ERROR: Expected extract-git-path-meta.json, got: $(basename "$meta_file")"
+      rm -rf "$(dirname "$meta_file")"
       return 1
     fi
     
@@ -51,7 +58,7 @@ testAbsolutePath() {
     
     # Verify meta.json structure
     if ! grep -q '"original_path"' "$meta_file"; then
-      echo "ERROR: meta.json missing original_path"
+      echo "ERROR: extract-git-path-meta.json missing original_path"
       rm -rf "$(dirname "$meta_file")"
       return 1
     fi
