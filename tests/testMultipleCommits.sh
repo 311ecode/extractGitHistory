@@ -1,0 +1,55 @@
+#!/usr/bin/env bash
+testMultipleCommits() {
+    echo "Testing extraction preserves commit history"
+    
+    # Create test repo with multiple commits
+    local test_repo=$(mktemp -d)
+    cd "$test_repo"
+    git init >/dev/null 2>&1
+    git config user.name "Test" >/dev/null 2>&1
+    git config user.email "test@test.com" >/dev/null 2>&1
+    
+    mkdir -p project/src
+    echo "v1" > project/src/file.txt
+    git add . >/dev/null 2>&1
+    git commit -m "First commit" >/dev/null 2>&1
+    
+    echo "v2" > project/src/file.txt
+    git add . >/dev/null 2>&1
+    git commit -m "Second commit" >/dev/null 2>&1
+    
+    echo "v3" > project/src/file.txt
+    git add . >/dev/null 2>&1
+    git commit -m "Third commit" >/dev/null 2>&1
+    
+    # Extract path
+    local output=$(extract_git_path "$test_repo/project/src")
+    local exit_code=$?
+    
+    # Cleanup test repo
+    rm -rf "$test_repo"
+    
+    if [[ $exit_code -ne 0 ]]; then
+      echo "ERROR: Function failed"
+      rm -rf "$output" 2>/dev/null
+      return 1
+    fi
+    
+    # Check commit count
+    cd "$output"
+    local commit_count=$(git log --oneline | wc -l)
+    
+    if [[ $commit_count -ne 3 ]]; then
+      echo "ERROR: Expected 3 commits, found $commit_count"
+      cd - >/dev/null
+      rm -rf "$output"
+      return 1
+    fi
+    
+    # Cleanup
+    cd - >/dev/null
+    rm -rf "$output"
+    
+    echo "SUCCESS: All commits preserved in extraction"
+    return 0
+  }
