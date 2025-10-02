@@ -23,32 +23,40 @@ testMultipleCommits() {
     git commit -m "Third commit" >/dev/null 2>&1
     
     # Extract path
-    local output=$(extract_git_path "$test_repo/project/src")
+    local stderr_capture=$(mktemp)
+    local meta_file
+    meta_file=$(extract_git_path "$test_repo/project/src" 2>"$stderr_capture")
     local exit_code=$?
+    local repo_path=$(tail -1 "$stderr_capture")  # Get only last line
+    rm -f "$stderr_capture"
     
     # Cleanup test repo
     rm -rf "$test_repo"
     
     if [[ $exit_code -ne 0 ]]; then
       echo "ERROR: Function failed"
-      rm -rf "$output" 2>/dev/null
+      [[ -n "$meta_file" ]] && rm -rf "$(dirname "$meta_file")" 2>/dev/null
       return 1
     fi
     
     # Check commit count
-    cd "$output"
+    cd "$repo_path" || {
+      echo "ERROR: Cannot cd to repo_path: $repo_path"
+      rm -rf "$(dirname "$meta_file")"
+      return 1
+    }
     local commit_count=$(git log --oneline | wc -l)
     
     if [[ $commit_count -ne 3 ]]; then
       echo "ERROR: Expected 3 commits, found $commit_count"
       cd - >/dev/null
-      rm -rf "$output"
+      rm -rf "$(dirname "$meta_file")"
       return 1
     fi
     
     # Cleanup
     cd - >/dev/null
-    rm -rf "$output"
+    rm -rf "$(dirname "$meta_file")"
     
     echo "SUCCESS: All commits preserved in extraction"
     return 0

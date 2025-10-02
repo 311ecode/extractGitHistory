@@ -15,33 +15,37 @@ testHistoryFlattened() {
     git commit -m "Add nested file" >/dev/null 2>&1
     
     # Extract nested path
-    local output=$(extract_git_path "$test_repo/deep/nested/subproject")
+    local stderr_capture=$(mktemp)
+    local meta_file
+    meta_file=$(extract_git_path "$test_repo/deep/nested/subproject" 2>"$stderr_capture")
     local exit_code=$?
+    local repo_path=$(tail -1 "$stderr_capture")  # Get only last line
+    rm -f "$stderr_capture"
     
     # Cleanup test repo
     rm -rf "$test_repo"
     
     if [[ $exit_code -ne 0 ]]; then
       echo "ERROR: Function failed"
-      rm -rf "$output" 2>/dev/null
+      [[ -n "$meta_file" ]] && rm -rf "$(dirname "$meta_file")" 2>/dev/null
       return 1
     fi
     
     # Check that file is at root in extracted repo
-    if [[ ! -f "$output/file.txt" ]]; then
+    if [[ ! -f "$repo_path/file.txt" ]]; then
       echo "ERROR: File not flattened to root (expected file.txt at root)"
-      rm -rf "$output"
+      rm -rf "$(dirname "$meta_file")"
       return 1
     fi
     
-    if [[ -d "$output/deep" ]]; then
+    if [[ -d "$repo_path/deep" ]]; then
       echo "ERROR: Directory structure not flattened (deep/ still exists)"
-      rm -rf "$output"
+      rm -rf "$(dirname "$meta_file")"
       return 1
     fi
     
     # Cleanup
-    rm -rf "$output"
+    rm -rf "$(dirname "$meta_file")"
     
     echo "SUCCESS: History correctly flattened to root"
     return 0
