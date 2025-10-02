@@ -1,17 +1,13 @@
 #!/usr/bin/env bash
-testUnified() {
+test_gitHistoryTools_unified() {
   export LC_NUMERIC=C
   # Unified test registry combining both suites
   local test_functions=(
     # extract-git-path suite
-    "testExtractGitPath"
-    "testGithubPusher"
+    "test_gitHistoryTools_extractGitPath"
+    "test_gitHistoryTools_githubPusher"
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
   return $?
 }
-# Execute if run directly
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  testUnified
-fi

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-testPathNeverTracked() {
+test_extractGitPath_pathNeverTracked() {
     echo "Testing error when path never tracked"
     
     # Create test repo
