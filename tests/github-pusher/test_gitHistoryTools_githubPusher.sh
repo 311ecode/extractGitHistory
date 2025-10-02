@@ -9,6 +9,7 @@ test_gitHistoryTools_githubPusher() {
         "test_githubPusher_dryRun"
         "test_githubPusher_createAndCleanup"
         "test_githubPusher_alreadyExists"
+        "test_githubPusher_updatesMetaJson"
     )
     
     local ignored_tests=()

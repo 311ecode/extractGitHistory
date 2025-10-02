@@ -136,6 +136,14 @@ EOF
 
   cat >> "$meta_file" <<EOF
 
+  },
+  "sync_status": {
+    "synced": false,
+    "github_url": null,
+    "github_owner": null,
+    "github_repo": null,
+    "synced_at": null,
+    "synced_by": null
   }
 }
 EOF

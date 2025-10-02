@@ -79,7 +79,7 @@ github_pusher_create_repo() {
     local dry_run="${7:-false}"
     
     if [[ "$dry_run" == "true" ]]; then
-        echo "[DRY RUN] Would create repository: $owner/$repo_name"
+        echo "[DRY RUN] Would create repository: $owner/$repo_name" >&2
         echo "https://github.com/$owner/$repo_name"
         return 0
     fi
@@ -153,6 +153,52 @@ github_pusher_delete_repo() {
     return 0
 }
 
+github_pusher_update_meta_json() {
+    local meta_file="$1"
+    local github_url="$2"
+    local github_owner="$3"
+    local github_repo="$4"
+    local synced_by="$5"
+    local debug="${6:-false}"
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Updating meta.json with sync status" >&2
+    fi
+    
+    local synced_at
+    synced_at=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    
+    # Use jq to update sync_status in place
+    local temp_file
+    temp_file=$(mktemp)
+    
+    jq \
+        --arg url "$github_url" \
+        --arg owner "$github_owner" \
+        --arg repo "$github_repo" \
+        --arg synced_at "$synced_at" \
+        --arg synced_by "$synced_by" \
+        '.sync_status.synced = true |
+         .sync_status.github_url = $url |
+         .sync_status.github_owner = $owner |
+         .sync_status.github_repo = $repo |
+         .sync_status.synced_at = $synced_at |
+         .sync_status.synced_by = $synced_by' \
+        "$meta_file" > "$temp_file"
+    
+    if [[ $? -eq 0 ]]; then
+        mv "$temp_file" "$meta_file"
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Successfully updated meta.json" >&2
+        fi
+        return 0
+    else
+        echo "ERROR: Failed to update meta.json" >&2
+        rm -f "$temp_file"
+        return 1
+    fi
+}
+
 github_pusher() {
     local meta_file="$1"
     local dry_run="${2:-false}"
@@ -189,8 +235,15 @@ github_pusher() {
     
     # Check if repository exists
     if github_pusher_check_repo_exists "$github_user" "$repo_name" "$github_token" "$debug"; then
+        local repo_url="https://github.com/$github_user/$repo_name"
         echo "Repository $github_user/$repo_name already exists"
-        echo "https://github.com/$github_user/$repo_name"
+        echo "$repo_url"
+        
+        # Update meta.json even if repo exists
+        if [[ "$dry_run" != "true" ]]; then
+            github_pusher_update_meta_json "$meta_file" "$repo_url" "$github_user" "$repo_name" "$github_user" "$debug"
+        fi
+        
         return 0
     fi
     
@@ -199,6 +252,39 @@ github_pusher() {
     original_path=$(jq -r '.original_path' "$meta_file")
     local description="Extracted from $original_path"
     
-    github_pusher_create_repo "$github_user" "$repo_name" "$description" "true" "$github_token" "$debug" "$dry_run"
-    return $?
+    local repo_url
+    repo_url=$(github_pusher_create_repo "$github_user" "$repo_name" "$description" "true" "$github_token" "$debug" "$dry_run")
+    local create_status=$?
+    
+    if [[ $create_status -ne 0 ]]; then
+        return 1
+    fi
+    
+    # Handle dry-run mode
+    if [[ "$dry_run" == "true" ]]; then
+        echo ""
+        echo "[DRY RUN] Proposed sync_status update:"
+        cat <<EOF
+{
+  "sync_status": {
+    "synced": true,
+    "github_url": "https://github.com/$github_user/$repo_name",
+    "github_owner": "$github_user",
+    "github_repo": "$repo_name",
+    "synced_at": "[DRY-RUN: would be populated with current timestamp]",
+    "synced_by": "$github_user"
+  }
+}
+EOF
+        return 0
+    fi
+    
+    # Update meta.json with sync status
+    if ! github_pusher_update_meta_json "$meta_file" "$repo_url" "$github_user" "$repo_name" "$github_user" "$debug"; then
+        return 1
+    fi
+    
+    # Output the repository URL for the caller
+    echo "$repo_url"
+    return 0
 }
