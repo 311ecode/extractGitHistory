@@ -1,168 +1,125 @@
-# YAML Scanner for GitHub Repository Metadata
+# Git History Tools - Extract and Sync Repository Subdirectories
 
-A Bash-based tool for parsing YAML configuration files to extract GitHub repository metadata.
+A comprehensive toolkit for extracting git history from subdirectories and syncing them to individual GitHub repositories. This project enables you to split a monorepo into multiple independent repositories while preserving full commit history.
 
-## Overview
+**Note:** This repository was itself extracted from a larger monorepo using these very tools.
 
-The YAML scanner reads a configuration file (`.github-sync.yaml`) and extracts project information including paths and repository names. It's designed for managing multiple GitHub repositories from a single configuration file.
+## Core Components
 
-## YAML Configuration Format
+### 1. Extract Git Path
+Extracts git history for a specific path, with the path flattened to the root of a new repository.
+
+**Features:**
+- Fast extraction using `git-filter-repo`
+- Preserves complete commit history
+- Flattens directory structure to repository root
+- Generates commit mappings between original and extracted hashes
+- Creates metadata file for tracking
+
+See [README_EXTRACT_GIT_PATH.md](README_EXTRACT_GIT_PATH.md) for detailed documentation.
+
+### 2. GitHub Pusher
+Creates GitHub repositories and pushes extracted git history.
+
+**Features:**
+- Automatic repository creation via GitHub API
+- Pushes git history to GitHub
+- Uses README.md first line as repository description
+- Updates existing repositories
+- Tracks sync status in metadata
+
+### 3. GitHub Sync Workflow
+Orchestrates the complete workflow from YAML configuration to GitHub.
+
+**Features:**
+- YAML-based configuration for multiple projects
+- Processes multiple repositories in batch
+- Handles errors gracefully with per-project reporting
+- Supports dry-run mode
+
+See [README_GITHUB_SYNC_WORKFLOW.md](README_GITHUB_SYNC_WORKFLOW.md) for workflow documentation.
+
+## Quick Start
+
+### Prerequisites
+
+- `git-filter-repo` (install: `pip install git-filter-repo`)
+- `yq` (install: `pip install yq`)
+- `jq`
+- GitHub personal access token
+
+### Configuration
+
+Create `.github-sync.yaml` at your repository root:
 
 ```yaml
-github_user: your-github-username
+github_user: your-username
+json_output: /path/to/output.json
 
 projects:
-  - path: /home/user/projects/repo1
-    repo_name: custom-repo-1
-  - path: /home/user/projects/repo2
-  - path: /path/to/another-project
-    repo_name: special-name
+  - path: /home/user/monorepo/subdirectory1
+    repo_name: extracted-repo-1
+  - path: /home/user/monorepo/subdirectory2
+    repo_name: extracted-repo-2
 ```
 
-### Configuration Fields
-
-- **`github_user`** (required): Your GitHub username, defined once at the top level
-- **`projects`** (required): Array of project configurations
-  - **`path`** (required): Absolute path to the local repository
-  - **`repo_name`** (optional): Custom repository name. If omitted, derived from the directory name
-
-## Dependencies
-
-- `yq` - YAML processor (install: `pip install yq`)
-- `jq` - JSON processor (for parsing output)
-- `bash` 4.0+
-
-## Usage
-
-### Basic Usage
+### Usage
 
 ```bash
-# Use default config file (.github-sync.yaml in current directory)
-yaml_scanner
+# Set credentials
+export GITHUB_TOKEN="your_token"
+export GITHUB_USER="your_username"
 
-# Specify custom config file
-yaml_scanner /path/to/config.yaml
+# Run workflow
+github_sync_workflow
+
+# Or with debug output
+DEBUG=1 github_sync_workflow
 ```
 
-### Enable Debug Mode
+## Use Case: From Monorepo to Multiple Repos
 
-```bash
-DEBUG=true yaml_scanner
+This toolkit solves the common problem of splitting a monorepo:
+
+1. **You have:** A large monorepo with multiple independent projects
+2. **You want:** Each project in its own repository with full git history
+3. **Challenge:** Standard git operations lose history or are extremely slow
+4. **Solution:** These tools extract, preserve history, and automate GitHub sync
+
+## Architecture
+
 ```
-
-### Output Format
-
-The scanner outputs JSON:
-
-```json
-[
-  {
-    "github_user": "your-username",
-    "path": "/home/user/projects/repo1",
-    "repo_name": "custom-repo-1"
-  },
-  {
-    "github_user": "your-username",
-    "path": "/home/user/projects/repo2",
-    "repo_name": "repo2"
-  }
-]
-```
-
-### Parsing Output
-
-```bash
-# Get all repository names
-yaml_scanner | jq -r '.[].repo_name'
-
-# Get all paths
-yaml_scanner | jq -r '.[].path'
-
-# Get specific project
-yaml_scanner | jq -r '.[0]'
+YAML Config → YAML Scanner → JSON Metadata
+                                    ↓
+                            Extract Git Path → Temporary Repo + Metadata
+                                                        ↓
+                                                GitHub Pusher → GitHub Repository
 ```
 
 ## Testing
 
-Run the test suite:
-
 ```bash
-./tests/yaml-scanner/test_gitHistoryTools_yamlScanner.sh
+# Run all tests
+./tests/test_gitHistoryTools_unified.sh
+
+# Run specific component tests
+./tests/extract-git-path/test_gitHistoryTools_extractGitPath.sh
+./tests/github-pusher/test_gitHistoryTools_githubPusher.sh
+./tests/github-sync-workflow/test_gitHistoryTools_githubSyncWorkflow.sh
 ```
 
-### Test Coverage
+## Documentation
 
-- **`test_yamlScanner_multipleProjects`**: Verifies extraction of multiple projects with custom and derived repository names
-- **`test_yamlScanner_emptyProjects`**: Validates error handling for empty project lists
-
-## Error Handling
-
-The scanner handles various error conditions:
-
-- Missing YAML file
-- Missing `yq` dependency
-- Missing `github_user` field
-- Empty projects list
-- Invalid YAML syntax
-
-Error messages are written to stderr with appropriate exit codes.
+- [Extract Git Path](README_EXTRACT_GIT_PATH.md) - Detailed extraction documentation
+- [GitHub Sync Workflow](README_GITHUB_SYNC_WORKFLOW.md) - Workflow orchestration guide
 
 ## Design Principles
 
-### Single User Per Config
-
-The configuration follows the principle that **one token = one user**. The `github_user` is defined once at the top level rather than per-project, which:
-
-- Reduces redundancy
-- Simplifies maintenance
-- Reflects the typical use case of managing multiple repos under a single GitHub account
-
-### Repository Name Derivation
-
-If `repo_name` is not explicitly provided, it's automatically derived from the last component of the `path`:
-
-```yaml
-projects:
-  - path: /home/user/my-awesome-project  # repo_name = "my-awesome-project"
-```
-
-## Functions
-
-### Public API
-
-- **`yaml_scanner [yaml_file]`**: Main entry point for scanning YAML files
-
-### Internal Functions
-
-- **`yaml_scanner_parse_config`**: Validates YAML file and checks dependencies
-- **`yaml_scanner_get_github_user`**: Extracts top-level GitHub username
-- **`yaml_scanner_get_project_count`**: Returns number of projects in config
-- **`yaml_scanner_extract_project`**: Extracts individual project metadata
-
-## Example Workflow
-
-```bash
-# Create config file
-cat > .github-sync.yaml <<EOF
-github_user: johndoe
-
-projects:
-  - path: /home/johndoe/work/api-server
-    repo_name: company-api
-  - path: /home/johndoe/work/frontend
-  - path: /home/johndoe/personal/dotfiles
-EOF
-
-# Scan and process
-yaml_scanner | jq -r '.[] | "\(.github_user)/\(.repo_name) -> \(.path)"'
-```
-
-Output:
-```
-johndoe/company-api -> /home/johndoe/work/api-server
-johndoe/frontend -> /home/johndoe/work/frontend
-johndoe/dotfiles -> /home/johndoe/personal/dotfiles
-```
+- **Performance First:** Uses `git-filter-repo` for 10-100x faster operations
+- **Data Preservation:** Maintains complete commit history and metadata
+- **Automation:** Batch processing with error handling
+- **Flexibility:** Works with any subdirectory structure
+- **Traceability:** Tracks all operations in metadata files
 
 ## License
 
