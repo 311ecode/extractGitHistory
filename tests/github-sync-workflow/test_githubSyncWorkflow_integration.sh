@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-test_githubSyncWorkflow_integration() {
+
+() {
     echo "Testing complete GitHub sync workflow with real repo creation"
     
     # Use test-specific credentials
@@ -39,6 +40,15 @@ test_githubSyncWorkflow_integration() {
     echo "nested" > src/subdir/nested.txt
     git add . >/dev/null 2>&1
     git commit -m "Third commit" >/dev/null 2>&1
+    
+    if [[ -n "${DEBUG:-}" ]]; then
+        echo "DEBUG: Created test repo with commits:" >&2
+        cd "$test_repo"
+        git log --oneline >&2
+        echo "DEBUG: Files in src/:" >&2
+        find src -type f >&2
+        cd - >/dev/null
+    fi
     
     # Create YAML config
     local config_dir=$(mktemp -d)
@@ -91,48 +101,111 @@ EOF
     
     echo "Repository created: ${test_repo_name}"
     
-    # List files in repository via API
+    # Check repository contents via API
     if [[ -n "${DEBUG:-}" ]]; then
-        echo "DEBUG: Fetching repository contents..." >&2
-        
-        # Get default branch first
-        local repo_info
-        repo_info=$(curl -s -H "Authorization: token $github_token" \
-            "https://api.github.com/repos/$github_user/$test_repo_name")
-        
-        local default_branch
-        default_branch=$(echo "$repo_info" | jq -r '.default_branch')
-        
-        if [[ "$default_branch" == "null" ]] || [[ -z "$default_branch" ]]; then
-            echo "DEBUG: Repository has no default branch (no commits pushed yet)" >&2
-        else
-            echo "DEBUG: Default branch: $default_branch" >&2
-            
-            # Get tree
-            local tree_sha
-            tree_sha=$(curl -s -H "Authorization: token $github_token" \
-                "https://api.github.com/repos/$github_user/$test_repo_name/branches/$default_branch" \
-                | jq -r '.commit.commit.tree.sha')
-            
-            if [[ "$tree_sha" != "null" ]] && [[ -n "$tree_sha" ]]; then
-                echo "DEBUG: Repository contents (tree):" >&2
-                
-                # Get recursive tree
-                local tree_contents
-                tree_contents=$(curl -s -H "Authorization: token $github_token" \
-                    "https://api.github.com/repos/$github_user/$test_repo_name/git/trees/$tree_sha?recursive=1")
-                
-                # Pretty print the tree
-                echo "$tree_contents" | jq -r '.tree[] | "  \(.type): \(.path)"' >&2
-                
-                # Show file count
-                local file_count
-                file_count=$(echo "$tree_contents" | jq '[.tree[] | select(.type == "blob")] | length')
-                echo "DEBUG: Total files in repository: $file_count" >&2
-            else
-                echo "DEBUG: Could not fetch tree contents" >&2
-            fi
+        echo "DEBUG: Fetching repository info..." >&2
+    fi
+    
+    local repo_info
+    repo_info=$(curl -s -H "Authorization: token $github_token" \
+        "https://api.github.com/repos/$github_user/$test_repo_name")
+    
+    if [[ -n "${DEBUG:-}" ]]; then
+        echo "DEBUG: Repository size: $(echo "$repo_info" | jq -r '.size') KB" >&2
+        echo "DEBUG: Has default_branch field: $(echo "$repo_info" | jq 'has("default_branch")')" >&2
+    fi
+    
+    local default_branch
+    default_branch=$(echo "$repo_info" | jq -r '.default_branch // empty')
+    
+    if [[ -z "$default_branch" ]] || [[ "$default_branch" == "null" ]]; then
+        echo "ERROR: Repository has no default branch - git history was not pushed!" >&2
+        if [[ -n "${DEBUG:-}" ]]; then
+            echo "DEBUG: This means github_pusher only created an empty repo" >&2
+            echo "DEBUG: The extracted git history was never pushed to GitHub" >&2
         fi
+        github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "false"
+        return 1
+    fi
+    
+    if [[ -n "${DEBUG:-}" ]]; then
+        echo "DEBUG: Default branch: $default_branch" >&2
+        
+        # Get commit count
+        local commits_url="https://api.github.com/repos/$github_user/$test_repo_name/commits"
+        local commits
+        commits=$(curl -s -H "Authorization: token $github_token" "$commits_url")
+        
+        # Check if it's an array
+        if echo "$commits" | jq -e 'type == "array"' >/dev/null 2>&1; then
+            local commit_count
+            commit_count=$(echo "$commits" | jq 'length')
+            echo "DEBUG: Number of commits on GitHub: $commit_count" >&2
+            
+            if [[ "$commit_count" -gt 0 ]]; then
+                echo "DEBUG: Recent commits:" >&2
+                echo "$commits" | jq -r '.[] | "  - \(.commit.message) (\(.sha[0:7]))"' 2>/dev/null || echo "  (could not parse commits)" >&2
+            fi
+        else
+            echo "DEBUG: Commits API returned non-array response:" >&2
+            echo "$commits" | jq '.' >&2
+        fi
+        
+        # Get branch info
+        echo "DEBUG: Fetching branch details..." >&2
+        local branch_info
+        branch_info=$(curl -s -H "Authorization: token $github_token" \
+            "https://api.github.com/repos/$github_user/$test_repo_name/branches/$default_branch")
+        
+        echo "DEBUG: Branch response:" >&2
+        echo "$branch_info" | jq '.' >&2
+    fi
+    
+    # Get tree to list files
+    local branch_info
+    branch_info=$(curl -s -H "Authorization: token $github_token" \
+        "https://api.github.com/repos/$github_user/$test_repo_name/branches/$default_branch")
+    
+    local tree_sha
+    tree_sha=$(echo "$branch_info" | jq -r '.commit.commit.tree.sha // empty')
+    
+    if [[ -z "$tree_sha" ]] || [[ "$tree_sha" == "null" ]]; then
+        echo "ERROR: Could not fetch tree SHA - branch may be empty" >&2
+        if [[ -n "${DEBUG:-}" ]]; then
+            echo "DEBUG: Branch info response:" >&2
+            echo "$branch_info" | jq '.' >&2
+        fi
+        github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "false"
+        return 1
+    fi
+    
+    if [[ -n "${DEBUG:-}" ]]; then
+        echo "DEBUG: Tree SHA: $tree_sha" >&2
+        echo "DEBUG: Fetching repository contents..." >&2
+    fi
+    
+    # Get recursive tree
+    local tree_contents
+    tree_contents=$(curl -s -H "Authorization: token $github_token" \
+        "https://api.github.com/repos/$github_user/$test_repo_name/git/trees/$tree_sha?recursive=1")
+    
+    if [[ -n "${DEBUG:-}" ]]; then
+        echo "DEBUG: Repository file structure:" >&2
+        echo "$tree_contents" | jq -r '.tree[]? | "  \(.type): \(.path)"' 2>/dev/null || echo "  (could not parse tree)" >&2
+    fi
+    
+    # Count files
+    local file_count
+    file_count=$(echo "$tree_contents" | jq '[.tree[]? | select(.type == "blob")] | length' 2>/dev/null || echo "0")
+    
+    echo "Files in repository: $file_count"
+    
+    # We expect 3 files: file.txt, another.txt, subdir/nested.txt
+    if [[ "$file_count" -lt 3 ]]; then
+        echo "ERROR: Expected at least 3 files, found $file_count" >&2
+        echo "ERROR: Git history was not properly pushed to GitHub" >&2
+        github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "false"
+        return 1
     fi
     
     # Verify success message in output
