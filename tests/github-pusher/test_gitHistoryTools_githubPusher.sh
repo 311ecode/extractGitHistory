@@ -10,6 +10,7 @@ test_gitHistoryTools_githubPusher() {
         "test_githubPusher_createAndCleanup"
         "test_githubPusher_alreadyExists"
         "test_githubPusher_updatesMetaJson"
+        "test_githubPusher_readmeDescription"
     )
     
     local ignored_tests=()

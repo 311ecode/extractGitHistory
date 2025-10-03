@@ -54,6 +54,37 @@ github_pusher_generate_repo_name() {
     fi
 }
 
+github_pusher_get_description() {
+    local extracted_repo_path="$1"
+    local original_path="$2"
+    local debug="${3:-false}"
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Looking for README.md in: $extracted_repo_path" >&2
+    fi
+    
+    # Check if README.md exists
+    if [[ -f "$extracted_repo_path/README.md" ]]; then
+        # Get first non-empty line
+        local first_line
+        first_line=$(grep -m 1 -v '^[[:space:]]*$' "$extracted_repo_path/README.md" | sed 's/^[#[:space:]]*//')
+        
+        if [[ -n "$first_line" ]]; then
+            if [[ "$debug" == "true" ]]; then
+                echo "DEBUG: Using first line from README.md: $first_line" >&2
+            fi
+            echo "$first_line"
+            return 0
+        fi
+    fi
+    
+    # Fallback to extracted from path
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: No README.md found, using default description" >&2
+    fi
+    echo "Extracted from $original_path"
+}
+
 github_pusher_check_repo_exists() {
     local owner="$1"
     local repo_name="$2"
@@ -92,12 +123,14 @@ github_pusher_create_repo() {
     
     if [[ "$dry_run" == "true" ]]; then
         echo "[DRY RUN] Would create repository: $owner/$repo_name" >&2
+        echo "[DRY RUN] Description: $description" >&2
         echo "https://github.com/$owner/$repo_name"
         return 0
     fi
     
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: Creating repository: $owner/$repo_name" >&2
+        echo "DEBUG: Description: $description" >&2
     fi
     
     local payload
@@ -144,6 +177,35 @@ github_pusher_create_repo() {
     fi
     
     echo "$repo_url"
+    return 0
+}
+
+github_pusher_update_repo_description() {
+    local owner="$1"
+    local repo_name="$2"
+    local description="$3"
+    local github_token="$4"
+    local debug="${5:-false}"
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Updating repository description to: $description" >&2
+    fi
+    
+    local payload
+    payload=$(jq -n --arg desc "$description" '{description: $desc}')
+    
+    local response
+    response=$(curl -s -X PATCH \
+        -H "Authorization: token $github_token" \
+        -H "Accept: application/vnd.github.v3+json" \
+        -d "$payload" \
+        "https://api.github.com/repos/$owner/$repo_name")
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Update response:" >&2
+        echo "$response" | jq '.' >&2
+    fi
+    
     return 0
 }
 
@@ -314,10 +376,19 @@ github_pusher() {
     local extracted_repo_path
     extracted_repo_path=$(jq -r '.extracted_repo_path' "$meta_file")
     
+    # Get original path for description fallback
+    local original_path
+    original_path=$(jq -r '.original_path' "$meta_file")
+    
+    # Get description from README.md or use default
+    local description
+    description=$(github_pusher_get_description "$extracted_repo_path" "$original_path" "$debug")
+    
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: Generated repo name: $repo_name" >&2
         echo "DEBUG: Target: $github_user/$repo_name" >&2
         echo "DEBUG: Extracted repo: $extracted_repo_path" >&2
+        echo "DEBUG: Description: $description" >&2
     fi
     
     local repo_url
@@ -328,12 +399,13 @@ github_pusher() {
         repo_url="https://github.com/$github_user/$repo_name"
         echo "Repository $github_user/$repo_name already exists"
         repo_existed=true
+        
+        # Update description even if repo exists
+        if [[ "$dry_run" != "true" ]]; then
+            github_pusher_update_repo_description "$github_user" "$repo_name" "$description" "$github_token" "$debug"
+        fi
     else
         # Create repository
-        local original_path
-        original_path=$(jq -r '.original_path' "$meta_file")
-        local description="Extracted from $original_path"
-        
         repo_url=$(github_pusher_create_repo "$github_user" "$repo_name" "$description" "true" "$github_token" "$debug" "$dry_run")
         local create_status=$?
         
