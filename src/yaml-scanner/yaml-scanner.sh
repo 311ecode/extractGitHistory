@@ -23,6 +23,18 @@ yaml_scanner_parse_config() {
     return 0
 }
 
+yaml_scanner_get_github_user() {
+    local yaml_file="$1"
+    
+    yq -r '.github_user // empty' "$yaml_file" 2>/dev/null
+}
+
+yaml_scanner_get_json_output_path() {
+    local yaml_file="$1"
+    
+    yq -r '.json_output // empty' "$yaml_file" 2>/dev/null
+}
+
 yaml_scanner_get_project_count() {
     local yaml_file="$1"
     
@@ -32,22 +44,12 @@ yaml_scanner_get_project_count() {
 
 yaml_scanner_extract_project() {
     local yaml_file="$1"
-    local index="$2"
-    local debug="${3:-false}"
+    local github_user="$2"
+    local index="$3"
+    local debug="${4:-false}"
     
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: Extracting project at index $index" >&2
-    fi
-    
-    # Extract github_user
-    local github_user
-    github_user=$(yq -r ".projects[$index].github_user // empty" "$yaml_file" 2>/dev/null)
-    
-    if [[ -z "$github_user" ]] || [[ "$github_user" == "null" ]]; then
-        if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: No github_user at index $index" >&2
-        fi
-        return 1
     fi
     
     # Extract path
@@ -106,6 +108,29 @@ yaml_scanner() {
         return 1
     fi
     
+    # Get github_user (required at top level)
+    local github_user
+    github_user=$(yaml_scanner_get_github_user "$yaml_file")
+    
+    if [[ -z "$github_user" ]] || [[ "$github_user" == "null" ]]; then
+        echo "ERROR: github_user not found in YAML" >&2
+        return 1
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: GitHub user: $github_user" >&2
+    fi
+    
+    # Get json_output path (optional)
+    local json_output
+    json_output=$(yaml_scanner_get_json_output_path "$yaml_file")
+    
+    if [[ -n "$json_output" ]] && [[ "$json_output" != "null" ]]; then
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: JSON output will be saved to: $json_output" >&2
+        fi
+    fi
+    
     # Get number of projects
     local project_count
     project_count=$(yaml_scanner_get_project_count "$yaml_file")
@@ -119,28 +144,53 @@ yaml_scanner() {
         echo "DEBUG: Found $project_count projects" >&2
     fi
     
+    # Build JSON output
+    local json_content=""
+    
     # Start JSON array
-    echo "["
+    json_content+="["$'\n'
     
     # Extract each project
     local first=true
     for ((i=0; i<project_count; i++)); do
         local project_json
-        project_json=$(yaml_scanner_extract_project "$yaml_file" "$i" "$debug")
+        project_json=$(yaml_scanner_extract_project "$yaml_file" "$github_user" "$i" "$debug")
         
         if [[ $? -eq 0 ]]; then
             if [[ "$first" == "true" ]]; then
                 first=false
             else
-                echo ","
+                json_content+=","$'\n'
             fi
-            echo "$project_json" | sed 's/^/  /'  # Indent for array
+            json_content+="$(echo "$project_json" | sed 's/^/  /')"  # Indent for array
         fi
     done
     
     # End JSON array
-    echo ""
-    echo "]"
+    json_content+=$'\n'"]"
+    
+    # Output or save JSON
+    if [[ -n "$json_output" ]] && [[ "$json_output" != "null" ]]; then
+        # Create directory if it doesn't exist
+        local output_dir
+        output_dir=$(dirname "$json_output")
+        if [[ ! -d "$output_dir" ]]; then
+            mkdir -p "$output_dir"
+        fi
+        
+        # Write to file
+        echo "$json_content" > "$json_output"
+        
+        if [[ $? -eq 0 ]]; then
+            echo "JSON output saved to: $json_output" >&2
+        else
+            echo "ERROR: Failed to write JSON output to: $json_output" >&2
+            return 1
+        fi
+    else
+        # Output to stdout
+        echo "$json_content"
+    fi
     
     return 0
 }

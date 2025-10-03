@@ -6,6 +6,7 @@ test_gitHistoryTools_yamlScanner() {
     local test_functions=(
         "test_yamlScanner_multipleProjects"
         "test_yamlScanner_emptyProjects"
+        "test_yamlScanner_jsonOutput"
     )
     
     local ignored_tests=()
