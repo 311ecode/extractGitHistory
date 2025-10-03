@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# GitHub repository creator for extracted git paths
-# Creates GitHub repositories based on extract-git-path-meta.json
+# GitHub repository creator and pusher for extracted git paths
 
 github_pusher_parse_meta_json() {
     local meta_file="$1"
@@ -148,6 +147,76 @@ github_pusher_create_repo() {
     return 0
 }
 
+github_pusher_push_git_history() {
+    local extracted_repo_path="$1"
+    local owner="$2"
+    local repo_name="$3"
+    local github_token="$4"
+    local debug="${5:-false}"
+    local dry_run="${6:-false}"
+    
+    if [[ "$dry_run" == "true" ]]; then
+        echo "[DRY RUN] Would push git history from: $extracted_repo_path" >&2
+        return 0
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Pushing git history to GitHub..." >&2
+        echo "DEBUG: Source: $extracted_repo_path" >&2
+        echo "DEBUG: Target: $owner/$repo_name" >&2
+    fi
+    
+    if [[ ! -d "$extracted_repo_path" ]]; then
+        echo "ERROR: Extracted repo path not found: $extracted_repo_path" >&2
+        return 1
+    fi
+    
+    cd "$extracted_repo_path" || return 1
+    
+    # Check if it's a git repo
+    if [[ ! -d .git ]]; then
+        echo "ERROR: Not a git repository: $extracted_repo_path" >&2
+        cd - >/dev/null
+        return 1
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Commits to push:" >&2
+        git log --oneline >&2
+    fi
+    
+    # Set remote URL with token for authentication
+    local remote_url="https://${github_token}@github.com/${owner}/${repo_name}.git"
+    
+    # Add remote
+    if ! git remote add origin "$remote_url" 2>/dev/null; then
+        # Remote might already exist
+        git remote set-url origin "$remote_url" 2>/dev/null
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Pushing to origin..." >&2
+    fi
+    
+    # Get current branch name
+    local branch_name
+    branch_name=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "master")
+    
+    # Push to main (GitHub's default)
+    if ! git push -u origin "${branch_name}:main" 2>&1 | grep -v "remote:"; then
+        echo "ERROR: Failed to push git history" >&2
+        cd - >/dev/null
+        return 1
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Successfully pushed to main branch" >&2
+    fi
+    
+    cd - >/dev/null
+    return 0
+}
+
 github_pusher_delete_repo() {
     local owner="$1"
     local repo_name="$2"
@@ -241,40 +310,45 @@ github_pusher() {
     local repo_name
     repo_name=$(github_pusher_generate_repo_name "$meta_file" "$debug")
     
+    # Get extracted repo path
+    local extracted_repo_path
+    extracted_repo_path=$(jq -r '.extracted_repo_path' "$meta_file")
+    
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: Generated repo name: $repo_name" >&2
         echo "DEBUG: Target: $github_user/$repo_name" >&2
+        echo "DEBUG: Extracted repo: $extracted_repo_path" >&2
     fi
+    
+    local repo_url
+    local repo_existed=false
     
     # Check if repository exists
     if github_pusher_check_repo_exists "$github_user" "$repo_name" "$github_token" "$debug"; then
-        local repo_url="https://github.com/$github_user/$repo_name"
+        repo_url="https://github.com/$github_user/$repo_name"
         echo "Repository $github_user/$repo_name already exists"
-        echo "$repo_url"
+        repo_existed=true
+    else
+        # Create repository
+        local original_path
+        original_path=$(jq -r '.original_path' "$meta_file")
+        local description="Extracted from $original_path"
         
-        # Update meta.json even if repo exists
-        if [[ "$dry_run" != "true" ]]; then
-            github_pusher_update_meta_json "$meta_file" "$repo_url" "$github_user" "$repo_name" "$github_user" "$debug"
+        repo_url=$(github_pusher_create_repo "$github_user" "$repo_name" "$description" "true" "$github_token" "$debug" "$dry_run")
+        local create_status=$?
+        
+        if [[ $create_status -ne 0 ]]; then
+            return 1
         fi
         
-        return 0
-    fi
-    
-    # Create repository
-    local original_path
-    original_path=$(jq -r '.original_path' "$meta_file")
-    local description="Extracted from $original_path"
-    
-    local repo_url
-    repo_url=$(github_pusher_create_repo "$github_user" "$repo_name" "$description" "true" "$github_token" "$debug" "$dry_run")
-    local create_status=$?
-    
-    if [[ $create_status -ne 0 ]]; then
-        return 1
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Repository created: $repo_url" >&2
+        fi
     fi
     
     # Handle dry-run mode
     if [[ "$dry_run" == "true" ]]; then
+        echo "$repo_url"
         echo ""
         echo "[DRY RUN] Proposed sync_status update:"
         cat <<EOF
@@ -290,6 +364,15 @@ github_pusher() {
 }
 EOF
         return 0
+    fi
+    
+    # Push git history
+    if ! github_pusher_push_git_history "$extracted_repo_path" "$github_user" "$repo_name" "$github_token" "$debug" "$dry_run"; then
+        if [[ "$repo_existed" == false ]]; then
+            echo "WARNING: Created repo but failed to push - cleaning up..." >&2
+            github_pusher_delete_repo "$github_user" "$repo_name" "$github_token" "$debug"
+        fi
+        return 1
     fi
     
     # Update meta.json with sync status
