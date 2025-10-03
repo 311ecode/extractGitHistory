@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-() {
+test_githubSyncWorkflow_integration() {
     echo "Testing complete GitHub sync workflow with real repo creation"
     
     # Use test-specific credentials
