@@ -6,6 +6,8 @@ test_yamlScanner_emptyProjects() {
     local yaml_file="$test_dir/.github-sync.yaml"
     
     cat > "$yaml_file" <<'EOF'
+github_user: testuser
+
 projects: []
 EOF
     

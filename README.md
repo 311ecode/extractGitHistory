@@ -10,7 +10,6 @@ The YAML scanner reads a configuration file (`.github-sync.yaml`) and extracts p
 
 ```yaml
 github_user: your-github-username
-json_output: /path/to/output/projects.json  # Optional
 
 projects:
   - path: /home/user/projects/repo1
@@ -23,7 +22,6 @@ projects:
 ### Configuration Fields
 
 - **`github_user`** (required): Your GitHub username, defined once at the top level
-- **`json_output`** (optional): Path where JSON output will be saved. If omitted, output goes to stdout
 - **`projects`** (required): Array of project configurations
   - **`path`** (required): Absolute path to the local repository
   - **`repo_name`** (optional): Custom repository name. If omitted, derived from the directory name
@@ -40,29 +38,10 @@ projects:
 
 ```bash
 # Use default config file (.github-sync.yaml in current directory)
-# Output to stdout
 yaml_scanner
 
 # Specify custom config file
 yaml_scanner /path/to/config.yaml
-```
-
-### Output to File
-
-If `json_output` is defined in the YAML config, the JSON will be saved to that path instead of stdout:
-
-```yaml
-github_user: johndoe
-json_output: /tmp/github-projects.json
-
-projects:
-  - path: /home/johndoe/repo1
-```
-
-```bash
-yaml_scanner
-# Output: "JSON output saved to: /tmp/github-projects.json" (to stderr)
-# File /tmp/github-projects.json is created with JSON content
 ```
 
 ### Enable Debug Mode
@@ -73,7 +52,7 @@ DEBUG=true yaml_scanner
 
 ### Output Format
 
-The scanner outputs JSON (to stdout or file):
+The scanner outputs JSON:
 
 ```json
 [
@@ -92,8 +71,6 @@ The scanner outputs JSON (to stdout or file):
 
 ### Parsing Output
 
-When output goes to stdout:
-
 ```bash
 # Get all repository names
 yaml_scanner | jq -r '.[].repo_name'
@@ -103,16 +80,6 @@ yaml_scanner | jq -r '.[].path'
 
 # Get specific project
 yaml_scanner | jq -r '.[0]'
-```
-
-When output is saved to file:
-
-```bash
-# Config has json_output defined
-yaml_scanner
-
-# Read from file
-jq -r '.[].repo_name' /path/to/output.json
 ```
 
 ## Testing
@@ -127,7 +94,6 @@ Run the test suite:
 
 - **`test_yamlScanner_multipleProjects`**: Verifies extraction of multiple projects with custom and derived repository names
 - **`test_yamlScanner_emptyProjects`**: Validates error handling for empty project lists
-- **`test_yamlScanner_jsonOutput`**: Tests JSON output to file functionality
 
 ## Error Handling
 
@@ -138,7 +104,6 @@ The scanner handles various error conditions:
 - Missing `github_user` field
 - Empty projects list
 - Invalid YAML syntax
-- Failed file write operations
 
 Error messages are written to stderr with appropriate exit codes.
 
@@ -161,15 +126,6 @@ projects:
   - path: /home/user/my-awesome-project  # repo_name = "my-awesome-project"
 ```
 
-### Output Flexibility
-
-The scanner supports two output modes:
-
-1. **Stdout mode** (default): JSON printed to stdout for piping to other commands
-2. **File mode**: JSON saved to specified path for persistent storage
-
-File mode automatically creates parent directories if they don't exist.
-
 ## Functions
 
 ### Public API
@@ -180,16 +136,13 @@ File mode automatically creates parent directories if they don't exist.
 
 - **`yaml_scanner_parse_config`**: Validates YAML file and checks dependencies
 - **`yaml_scanner_get_github_user`**: Extracts top-level GitHub username
-- **`yaml_scanner_get_json_output_path`**: Extracts optional JSON output path
 - **`yaml_scanner_get_project_count`**: Returns number of projects in config
 - **`yaml_scanner_extract_project`**: Extracts individual project metadata
 
-## Example Workflows
-
-### Stdout Mode (Default)
+## Example Workflow
 
 ```bash
-# Create config without json_output
+# Create config file
 cat > .github-sync.yaml <<EOF
 github_user: johndoe
 
@@ -200,7 +153,7 @@ projects:
   - path: /home/johndoe/personal/dotfiles
 EOF
 
-# Scan and pipe to jq
+# Scan and process
 yaml_scanner | jq -r '.[] | "\(.github_user)/\(.repo_name) -> \(.path)"'
 ```
 
@@ -209,28 +162,6 @@ Output:
 johndoe/company-api -> /home/johndoe/work/api-server
 johndoe/frontend -> /home/johndoe/work/frontend
 johndoe/dotfiles -> /home/johndoe/personal/dotfiles
-```
-
-### File Mode
-
-```bash
-# Create config with json_output
-cat > .github-sync.yaml <<EOF
-github_user: johndoe
-json_output: ~/.config/github-sync/projects.json
-
-projects:
-  - path: /home/johndoe/work/api-server
-    repo_name: company-api
-  - path: /home/johndoe/work/frontend
-EOF
-
-# Scan and save to file
-yaml_scanner
-# Output: "JSON output saved to: /home/johndoe/.config/github-sync/projects.json"
-
-# Later, read from file
-jq -r '.[].repo_name' ~/.config/github-sync/projects.json
 ```
 
 ## License

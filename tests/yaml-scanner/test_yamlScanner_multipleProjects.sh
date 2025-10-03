@@ -6,14 +6,13 @@ test_yamlScanner_multipleProjects() {
     local yaml_file="$test_dir/.github-sync.yaml"
     
     cat > "$yaml_file" <<'EOF'
+github_user: testuser
+
 projects:
-  - github_user: user1
-    path: /home/user/projects/repo1
+  - path: /home/user/projects/repo1
     repo_name: custom-repo-1
-  - github_user: user2
-    path: /home/user/projects/repo2
-  - github_user: user3
-    path: /path/to/another-project
+  - path: /home/user/projects/repo2
+  - path: /path/to/another-project
     repo_name: special-name
 EOF
     
@@ -31,14 +30,29 @@ EOF
         return 1
     fi
     
-    # Parse and verify first project
+    # Verify all projects have the same github_user
     local user1
     user1=$(echo "$output" | jq -r '.[0].github_user')
-    if [[ "$user1" != "user1" ]]; then
+    if [[ "$user1" != "testuser" ]]; then
         echo "ERROR: First project github_user incorrect: $user1"
         return 1
     fi
     
+    local user2
+    user2=$(echo "$output" | jq -r '.[1].github_user')
+    if [[ "$user2" != "testuser" ]]; then
+        echo "ERROR: Second project github_user incorrect: $user2"
+        return 1
+    fi
+    
+    local user3
+    user3=$(echo "$output" | jq -r '.[2].github_user')
+    if [[ "$user3" != "testuser" ]]; then
+        echo "ERROR: Third project github_user incorrect: $user3"
+        return 1
+    fi
+    
+    # Verify first project repo_name
     local repo1
     repo1=$(echo "$output" | jq -r '.[0].repo_name')
     if [[ "$repo1" != "custom-repo-1" ]]; then
@@ -55,13 +69,6 @@ EOF
     fi
     
     # Verify third project
-    local user3
-    user3=$(echo "$output" | jq -r '.[2].github_user')
-    if [[ "$user3" != "user3" ]]; then
-        echo "ERROR: Third project github_user incorrect: $user3"
-        return 1
-    fi
-    
     local repo3
     repo3=$(echo "$output" | jq -r '.[2].repo_name')
     if [[ "$repo3" != "special-name" ]]; then
