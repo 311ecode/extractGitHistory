@@ -23,75 +23,66 @@ yaml_scanner_parse_config() {
     return 0
 }
 
-yaml_scanner_extract_github_user() {
+yaml_scanner_get_project_count() {
     local yaml_file="$1"
-    local debug="${2:-false}"
     
-    # Try direct github_user key (Python yq with jq syntax)
-    local github_user
-    github_user=$(yq -r '.github_user // empty' "$yaml_file" 2>/dev/null)
-    
-    if [[ -n "$github_user" ]] && [[ "$github_user" != "null" ]]; then
-        echo "$github_user"
-        return 0
-    fi
-    
-    # Try nested github.user format
-    github_user=$(yq -r '.github.user // empty' "$yaml_file" 2>/dev/null)
-    
-    if [[ -n "$github_user" ]] && [[ "$github_user" != "null" ]]; then
-        echo "$github_user"
-        return 0
-    fi
-    
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: No github_user found in YAML" >&2
-    fi
-    
-    return 1
+    # Get the length of the projects array
+    yq -r '.projects | length' "$yaml_file" 2>/dev/null
 }
 
-yaml_scanner_extract_repo_name() {
+yaml_scanner_extract_project() {
     local yaml_file="$1"
-    local debug="${2:-false}"
-    
-    # First try to get repo_name directly
-    local repo_name
-    repo_name=$(yq -r '.repo_name // empty' "$yaml_file" 2>/dev/null)
-    
-    if [[ -n "$repo_name" ]] && [[ "$repo_name" != "null" ]]; then
-        echo "$repo_name"
-        return 0
-    fi
-    
-    # Try nested github.repo format
-    repo_name=$(yq -r '.github.repo // empty' "$yaml_file" 2>/dev/null)
-    
-    if [[ -n "$repo_name" ]] && [[ "$repo_name" != "null" ]]; then
-        echo "$repo_name"
-        return 0
-    fi
-    
-    # If no repo_name, try to get from path
-    local repo_path
-    repo_path=$(yq -r '.path // empty' "$yaml_file" 2>/dev/null)
-    
-    if [[ -z "$repo_path" ]] || [[ "$repo_path" == "null" ]]; then
-        repo_path=$(yq -r '.repo_path // empty' "$yaml_file" 2>/dev/null)
-    fi
-    
-    if [[ -n "$repo_path" ]] && [[ "$repo_path" != "null" ]]; then
-        # Extract last directory from path
-        repo_name=$(basename "$repo_path")
-        echo "$repo_name"
-        return 0
-    fi
+    local index="$2"
+    local debug="${3:-false}"
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: No repo_name or path found in YAML" >&2
+        echo "DEBUG: Extracting project at index $index" >&2
     fi
     
-    return 1
+    # Extract github_user
+    local github_user
+    github_user=$(yq -r ".projects[$index].github_user // empty" "$yaml_file" 2>/dev/null)
+    
+    if [[ -z "$github_user" ]] || [[ "$github_user" == "null" ]]; then
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: No github_user at index $index" >&2
+        fi
+        return 1
+    fi
+    
+    # Extract path
+    local path
+    path=$(yq -r ".projects[$index].path // empty" "$yaml_file" 2>/dev/null)
+    
+    if [[ -z "$path" ]] || [[ "$path" == "null" ]]; then
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: No path at index $index" >&2
+        fi
+        return 1
+    fi
+    
+    # Extract repo_name (optional)
+    local repo_name
+    repo_name=$(yq -r ".projects[$index].repo_name // empty" "$yaml_file" 2>/dev/null)
+    
+    # If no explicit repo_name, derive from path
+    if [[ -z "$repo_name" ]] || [[ "$repo_name" == "null" ]]; then
+        repo_name=$(basename "$path")
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Derived repo_name from path: $repo_name" >&2
+        fi
+    fi
+    
+    # Output JSON for this project
+    cat <<EOF
+{
+  "github_user": "$github_user",
+  "path": "$path",
+  "repo_name": "$repo_name"
+}
+EOF
+    
+    return 0
 }
 
 yaml_scanner() {
@@ -115,41 +106,41 @@ yaml_scanner() {
         return 1
     fi
     
-    # Extract GitHub user
-    local github_user
-    github_user=$(yaml_scanner_extract_github_user "$yaml_file" "$debug")
-    local user_status=$?
+    # Get number of projects
+    local project_count
+    project_count=$(yaml_scanner_get_project_count "$yaml_file")
     
-    if [[ $user_status -ne 0 ]] || [[ -z "$github_user" ]]; then
-        echo "ERROR: Could not extract github_user from YAML" >&2
+    if [[ -z "$project_count" ]] || [[ "$project_count" == "null" ]] || [[ "$project_count" -eq 0 ]]; then
+        echo "ERROR: No projects found in YAML" >&2
         return 1
     fi
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Extracted github_user: $github_user" >&2
+        echo "DEBUG: Found $project_count projects" >&2
     fi
     
-    # Extract repo name
-    local repo_name
-    repo_name=$(yaml_scanner_extract_repo_name "$yaml_file" "$debug")
-    local repo_status=$?
+    # Start JSON array
+    echo "["
     
-    if [[ $repo_status -ne 0 ]] || [[ -z "$repo_name" ]]; then
-        echo "ERROR: Could not extract repo_name or path from YAML" >&2
-        return 1
-    fi
+    # Extract each project
+    local first=true
+    for ((i=0; i<project_count; i++)); do
+        local project_json
+        project_json=$(yaml_scanner_extract_project "$yaml_file" "$i" "$debug")
+        
+        if [[ $? -eq 0 ]]; then
+            if [[ "$first" == "true" ]]; then
+                first=false
+            else
+                echo ","
+            fi
+            echo "$project_json" | sed 's/^/  /'  # Indent for array
+        fi
+    done
     
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Extracted repo_name: $repo_name" >&2
-    fi
-    
-    # Output as JSON
-    cat <<EOF
-{
-  "github_user": "$github_user",
-  "repo_name": "$repo_name"
-}
-EOF
+    # End JSON array
+    echo ""
+    echo "]"
     
     return 0
 }
