@@ -64,9 +64,13 @@ github_sync_workflow() {
         local repo_name
         repo_name=$(echo "$project" | jq -r '.repo_name')
         
+        local private
+        private=$(echo "$project" | jq -r '.private')
+        
         echo "========================================" >&2
         echo "Processing: $github_user/$repo_name" >&2
         echo "Path: $path" >&2
+        echo "Private: $private" >&2
         echo "========================================" >&2
         
         # Step 2a: Extract git history
@@ -97,14 +101,23 @@ github_sync_workflow() {
             echo "DEBUG: Meta file created: $meta_file" >&2
         fi
         
-        # Step 2b: Inject custom repo_name into meta.json
+        # Step 2b: Inject custom repo_name and private setting into meta.json
         if [[ "$debug" == "true" ]]; then
             echo "DEBUG: Injecting custom repo_name: $repo_name" >&2
+            echo "DEBUG: Injecting private setting: $private" >&2
         fi
         
         local temp_meta=$(mktemp)
-        jq --arg repo_name "$repo_name" '.custom_repo_name = $repo_name' "$meta_file" > "$temp_meta"
+        # Use --arg for repo_name and raw boolean value for private
+        jq --arg repo_name "$repo_name" \
+            '.custom_repo_name = $repo_name | .custom_private = (if "'"$private"'" == "true" then true else false end)' \
+            "$meta_file" > "$temp_meta"
         mv "$temp_meta" "$meta_file"
+        
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Updated meta.json:" >&2
+            jq '.custom_repo_name, .custom_private' "$meta_file" >&2
+        fi
         
         # Step 2c: Push to GitHub
         if [[ "$debug" == "true" ]]; then

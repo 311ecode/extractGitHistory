@@ -75,12 +75,28 @@ yaml_scanner_extract_project() {
         fi
     fi
     
+    # Extract private setting (optional, defaults to true)
+    local private
+    private=$(yq -r ".projects[$index].private // \"true\"" "$yaml_file" 2>/dev/null)
+    
+    # Convert to boolean
+    if [[ "$private" == "false" ]]; then
+        private="false"
+    else
+        private="true"
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Repository will be private: $private" >&2
+    fi
+    
     # Output JSON for this project
     cat <<EOF
 {
   "github_user": "$github_user",
   "path": "$path",
-  "repo_name": "$repo_name"
+  "repo_name": "$repo_name",
+  "private": $private
 }
 EOF
     
