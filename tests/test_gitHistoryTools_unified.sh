@@ -6,6 +6,7 @@ test_gitHistoryTools_unified() {
     # extract-git-path suite
     "test_gitHistoryTools_extractGitPath"
     "test_gitHistoryTools_githubPusher"
+    "test_gitHistoryTools_yamlScanner"
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
