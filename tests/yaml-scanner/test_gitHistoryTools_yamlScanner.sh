@@ -4,9 +4,8 @@ test_gitHistoryTools_yamlScanner() {
     
     # Test registry
     local test_functions=(
-        "test_yamlScanner_directRepoName"
-        "test_yamlScanner_pathBased"
-        "test_yamlScanner_missingFields"
+        "test_yamlScanner_multipleProjects"
+        "test_yamlScanner_emptyProjects"
     )
     
     local ignored_tests=()
