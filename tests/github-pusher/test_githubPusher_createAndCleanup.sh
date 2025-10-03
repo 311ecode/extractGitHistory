@@ -12,9 +12,9 @@ test_githubPusher_createAndCleanup() {
         return 0
     fi
     
-    # Generate unique test repo name
+    # Generate unique test repo name with -test- in it
     local timestamp=$(date +%s)
-    local test_repo_name="git-history-test-pusher-${timestamp}"
+    local test_repo_name="src-test-pusher-${timestamp}"
     
     local test_dir=$(mktemp -d)
     local meta_file="$test_dir/extract-git-path-meta.json"

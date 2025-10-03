@@ -12,9 +12,9 @@ test_githubPusher_alreadyExists() {
         return 0
     fi
     
-    # Generate unique test repo name
+    # Generate unique test repo name with -test- in it
     local timestamp=$(date +%s)
-    local test_repo_name="git-history-test-exists-${timestamp}"
+    local test_repo_name="src-test-exists-${timestamp}"
     
     # Create repository first via API
     github_pusher_create_repo "$github_user" "$test_repo_name" "Test repo" "true" "$github_token" "false" "false" >/dev/null
