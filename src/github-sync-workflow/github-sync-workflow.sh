@@ -1,0 +1,143 @@
+#!/usr/bin/env bash
+# GitHub Sync Workflow - Orchestrates YAML scanning, git extraction, and GitHub pushing
+
+github_sync_workflow() {
+    local yaml_file="${1:-.github-sync.yaml}"
+    local dry_run="${2:-false}"
+    local debug="${DEBUG:-false}"
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Starting GitHub sync workflow" >&2
+        echo "DEBUG: YAML file: $yaml_file" >&2
+        echo "DEBUG: Dry run: $dry_run" >&2
+    fi
+    
+    # Step 1: Scan YAML configuration
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Step 1 - Scanning YAML configuration..." >&2
+    fi
+    
+    if ! yaml_scanner "$yaml_file" >/dev/null 2>&1; then
+        echo "ERROR: YAML scanning failed" >&2
+        return 1
+    fi
+    
+    # Get JSON output path from YAML
+    local json_output
+    json_output=$(yaml_scanner_get_json_output_path "$yaml_file")
+    
+    if [[ -z "$json_output" ]] || [[ "$json_output" == "null" ]]; then
+        echo "ERROR: json_output not defined in YAML config" >&2
+        echo "ERROR: Please add 'json_output: /path/to/output.json' to your YAML" >&2
+        return 1
+    fi
+    
+    if [[ ! -f "$json_output" ]]; then
+        echo "ERROR: JSON output file not found: $json_output" >&2
+        return 1
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Projects JSON: $json_output" >&2
+    fi
+    
+    # Step 2: Process each project
+    local project_count
+    project_count=$(jq 'length' "$json_output")
+    
+    echo "Found $project_count project(s) to sync" >&2
+    echo "" >&2
+    
+    local success_count=0
+    local fail_count=0
+    
+    for ((i=0; i<project_count; i++)); do
+        local project
+        project=$(jq -c ".[$i]" "$json_output")
+        
+        local github_user
+        github_user=$(echo "$project" | jq -r '.github_user')
+        
+        local path
+        path=$(echo "$project" | jq -r '.path')
+        
+        local repo_name
+        repo_name=$(echo "$project" | jq -r '.repo_name')
+        
+        echo "========================================" >&2
+        echo "Processing: $github_user/$repo_name" >&2
+        echo "Path: $path" >&2
+        echo "========================================" >&2
+        
+        # Step 2a: Extract git history
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Extracting git history from: $path" >&2
+        fi
+        
+        local stderr_capture=$(mktemp)
+        local meta_file
+        
+        if [[ "$debug" == "true" ]]; then
+            meta_file=$(extract_git_path "$path" 2> >(tee "$stderr_capture" >&2))
+        else
+            meta_file=$(extract_git_path "$path" 2>"$stderr_capture")
+        fi
+        
+        local extract_exit_code=$?
+        rm -f "$stderr_capture"
+        
+        if [[ $extract_exit_code -ne 0 ]]; then
+            echo "ERROR: Git extraction failed for $path" >&2
+            ((fail_count++))
+            echo "" >&2
+            continue
+        fi
+        
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Meta file created: $meta_file" >&2
+        fi
+        
+        # Step 2b: Inject custom repo_name into meta.json
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Injecting custom repo_name: $repo_name" >&2
+        fi
+        
+        local temp_meta=$(mktemp)
+        jq --arg repo_name "$repo_name" '.custom_repo_name = $repo_name' "$meta_file" > "$temp_meta"
+        mv "$temp_meta" "$meta_file"
+        
+        # Step 2c: Push to GitHub
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Pushing to GitHub as $github_user/$repo_name" >&2
+        fi
+        
+        local github_url
+        github_url=$(github_pusher "$meta_file" "$dry_run" 2>&1)
+        local pusher_exit_code=$?
+        
+        if [[ $pusher_exit_code -ne 0 ]]; then
+            echo "ERROR: GitHub push failed for $repo_name" >&2
+            echo "$github_url" >&2
+            ((fail_count++))
+        else
+            echo "✓ Successfully synced: $github_url" >&2
+            ((success_count++))
+        fi
+        
+        echo "" >&2
+    done
+    
+    # Summary
+    echo "========================================" >&2
+    echo "Sync Complete" >&2
+    echo "========================================" >&2
+    echo "Success: $success_count" >&2
+    echo "Failed:  $fail_count" >&2
+    echo "" >&2
+    
+    if [[ $fail_count -gt 0 ]]; then
+        return 1
+    fi
+    
+    return 0
+}
