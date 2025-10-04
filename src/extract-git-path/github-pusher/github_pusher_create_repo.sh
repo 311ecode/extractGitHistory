@@ -3,7 +3,7 @@ github_pusher_create_repo() {
     local owner="$1"
     local repo_name="$2"
     local description="$3"
-    local private="$4"
+    local private="$4"  # Now expects string "true" or "false"
     local github_token="$5"
     local debug="${6:-false}"
     local dry_run="${7:-false}"
@@ -18,13 +18,22 @@ github_pusher_create_repo() {
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: Creating repository: $owner/$repo_name" >&2
         echo "DEBUG: Description: $description" >&2
+        echo "DEBUG: Private (string): $private" >&2
+    fi
+    
+    # Convert string to boolean for JSON
+    local private_bool
+    if [[ "$private" == "false" ]]; then
+        private_bool="false"
+    else
+        private_bool="true"
     fi
     
     local payload
     payload=$(jq -n \
         --arg name "$repo_name" \
         --arg desc "$description" \
-        --argjson private "$private" \
+        --argjson private "$private_bool" \
         '{name: $name, description: $desc, private: $private, auto_init: false}')
     
     # Determine API endpoint - organization vs user
