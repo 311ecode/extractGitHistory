@@ -50,17 +50,24 @@ yaml_scanner_extract_project() {
         repo_name=$(basename "$resolved_path")
     fi
     
-    # Extract private setting (default to true)
+    # Extract private setting (default to "true" as string)
     local private
     private=$(yq -r ".projects[$index].private // \"true\"" "$yaml_file")
     
-    # Build JSON object
+    # Normalize to string "true" or "false"
+    if [[ "$private" == "false" ]] || [[ "$private" == "False" ]] || [[ "$private" == "FALSE" ]]; then
+        private="false"
+    else
+        private="true"
+    fi
+    
+    # Build JSON object with private as string
     cat <<EOF
 {
   "github_user": "$github_user",
   "path": "$resolved_path",
   "repo_name": "$repo_name",
-  "private": $private
+  "private": "$private"
 }
 EOF
     

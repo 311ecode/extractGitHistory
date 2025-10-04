@@ -40,12 +40,12 @@ github_pusher() {
     local description
     description=$(github_pusher_get_description "$extracted_repo_path" "$original_path" "$debug")
     
-    # Get private setting (default to true) - ensure it's a proper boolean value
+    # Get private setting (default to "true" as string) - keep as string
     local private
-    local private_raw
-    private_raw=$(jq -r '.custom_private' "$meta_file")
+    private=$(jq -r '.custom_private // "true"' "$meta_file")
     
-    if [[ "$private_raw" == "false" ]]; then
+    # Normalize string value
+    if [[ "$private" == "false" ]] || [[ "$private" == "False" ]] || [[ "$private" == "FALSE" ]]; then
         private="false"
     else
         private="true"
@@ -56,8 +56,8 @@ github_pusher() {
         echo "DEBUG: Target: $github_user/$repo_name" >&2
         echo "DEBUG: Extracted repo: $extracted_repo_path" >&2
         echo "DEBUG: Description: $description" >&2
-        echo "DEBUG: custom_private from meta: $private_raw" >&2
-        echo "DEBUG: Private setting: $private" >&2
+        echo "DEBUG: custom_private from meta: $(jq -r '.custom_private // "true"' "$meta_file")" >&2
+        echo "DEBUG: Private setting (normalized): $private" >&2
     fi
     
     local repo_url
@@ -73,7 +73,7 @@ github_pusher() {
             # Update description
             github_pusher_update_repo_description "$github_user" "$repo_name" "$description" "$github_token" "$debug"
             
-            # Update visibility
+            # Update visibility - pass string value
             if github_pusher_update_repo_visibility "$github_user" "$repo_name" "$private" "$github_token" "$debug"; then
                 echo "Updated repository visibility to private=$private"
             fi
@@ -81,7 +81,7 @@ github_pusher() {
             echo "[DRY RUN] Would update description and visibility (private=$private)"
         fi
     else
-        # Create repository
+        # Create repository - pass string value
         repo_url=$(github_pusher_create_repo "$github_user" "$repo_name" "$description" "$private" "$github_token" "$debug" "$dry_run")
         local create_status=$?
         

@@ -49,10 +49,11 @@ github_sync_workflow_process_projects_helper() {
     fi
     
     local temp_meta=$(mktemp)
-    # Use --arg for repo_name and raw boolean value for private
+    # Keep private as string for GitHub API compatibility
     jq --arg repo_name "$repo_name" \
-        '.custom_repo_name = $repo_name | .custom_private = (if "'"$private"'" == "true" then true else false end)' \
-        "$meta_file" > "$temp_meta"
+       --arg private "$private" \
+       '.custom_repo_name = $repo_name | .custom_private = $private' \
+       "$meta_file" > "$temp_meta"
     mv "$temp_meta" "$meta_file"
     
     if [[ "$debug" == "true" ]]; then
