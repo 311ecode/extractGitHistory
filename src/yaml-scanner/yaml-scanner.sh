@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # YAML scanner for extracting GitHub repository metadata
 
-# ... (keep all functions the same until yaml_scanner) ...
 
 yaml_scanner() {
     local yaml_file="${1:-.github-sync.yaml}"
