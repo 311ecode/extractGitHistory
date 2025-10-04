@@ -7,7 +7,7 @@ test_gitHistoryTools_unified() {
     "test_gitHistoryTools_extractGitPath"
     "test_gitHistoryTools_githubPusher"
     "test_gitHistoryTools_yamlScanner"
-    "test_gitHistoryTools_githubPusher"
+    "test_gitHistoryTools_githubPusher"  # <- DUPLICATE!
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
