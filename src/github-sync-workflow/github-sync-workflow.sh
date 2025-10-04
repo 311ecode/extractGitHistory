@@ -41,6 +41,15 @@ github_sync_workflow() {
         echo "DEBUG: Projects JSON: $json_output" >&2
     fi
     
+    # Process projects using helper function
+    github_sync_workflow_process_projects "$json_output" "$dry_run" "$debug"
+}
+
+github_sync_workflow_process_projects() {
+    local json_output="$1"
+    local dry_run="$2"
+    local debug="$3"
+    
     # Step 2: Process each project
     local project_count
     project_count=$(jq 'length' "$json_output")
