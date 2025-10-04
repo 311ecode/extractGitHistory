@@ -7,6 +7,9 @@ test_gitHistoryTools_yamlScanner() {
         "test_yamlScanner_multipleProjects"
         "test_yamlScanner_emptyProjects"
         "test_yamlScanner_jsonOutput"
+        "test_yamlScanner_relativePaths"
+        "test_yamlScanner_mixedPaths"
+        "test_yamlScanner_invalidRelativePath"
     )
     
     local ignored_tests=()
