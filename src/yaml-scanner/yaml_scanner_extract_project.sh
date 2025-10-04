@@ -14,7 +14,7 @@ yaml_scanner_extract_project() {
         return 1
     fi
     
-    # Resolve relative paths
+    # Resolve relative paths from YAML file location
     local resolved_path
     if [[ "$path" = /* ]]; then
         # Absolute path - use as-is
@@ -24,7 +24,7 @@ yaml_scanner_extract_project() {
         local yaml_dir
         yaml_dir="$(cd "$(dirname "$yaml_file")" && pwd)"
         
-        # Handle ./ and plain relative paths
+        # Handle ./ prefix if present
         if [[ "$path" == ./* ]]; then
             path="${path#./}"
         fi
