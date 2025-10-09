@@ -4,6 +4,13 @@ github_sync_workflow_process_projects() {
     local dry_run="$2"
     local debug="$3"
     
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: github_sync_workflow_process_projects - Reading JSON from: $json_output" >&2
+        echo "DEBUG: JSON contents:" >&2
+        cat "$json_output" | jq '.' >&2
+        echo "DEBUG: ---" >&2
+    fi
+    
     # Step 2: Process each project
     local project_count
     project_count=$(jq 'length' "$json_output")
@@ -18,6 +25,11 @@ github_sync_workflow_process_projects() {
         local project
         project=$(jq -c ".[$i]" "$json_output")
         
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Processing project $i:" >&2
+            echo "$project" | jq '.' >&2
+        fi
+        
         local github_user
         github_user=$(echo "$project" | jq -r '.github_user')
         
@@ -29,6 +41,14 @@ github_sync_workflow_process_projects() {
         
         local private
         private=$(echo "$project" | jq -r '.private')
+        
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Extracted values:" >&2
+            echo "DEBUG:   github_user='$github_user'" >&2
+            echo "DEBUG:   path='$path'" >&2
+            echo "DEBUG:   repo_name='$repo_name'" >&2
+            echo "DEBUG:   private='$private'" >&2
+        fi
         
         echo "========================================" >&2
         echo "Processing: $github_user/$repo_name" >&2
@@ -60,4 +80,3 @@ github_sync_workflow_process_projects() {
     
     return 0
 }
-

@@ -4,6 +4,11 @@ github_sync_workflow_process_projects_helper() {
     local dry_run="$2"
     local debug="$3"
     
+    # Normalize debug value
+    if [[ "$debug" == "1" ]]; then
+        debug="true"
+    fi
+    
     local github_user
     github_user=$(echo "$project" | jq -r '.github_user')
     
@@ -18,7 +23,7 @@ github_sync_workflow_process_projects_helper() {
     
     # Step 2a: Extract git history
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Extracting git history from: $path" >&2
+        echo "DEBUG: process_projects_helper - Extracting git history from: $path" >&2
     fi
     
     local stderr_capture=$(mktemp)
@@ -39,13 +44,13 @@ github_sync_workflow_process_projects_helper() {
     fi
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Meta file created: $meta_file" >&2
+        echo "DEBUG: process_projects_helper - Meta file created: $meta_file" >&2
     fi
     
     # Step 2b: Inject custom repo_name and private setting into meta.json
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Injecting custom repo_name: $repo_name" >&2
-        echo "DEBUG: Injecting private setting: $private" >&2
+        echo "DEBUG: process_projects_helper - Injecting custom repo_name: $repo_name" >&2
+        echo "DEBUG: process_projects_helper - Injecting private setting: $private" >&2
     fi
     
     local temp_meta=$(mktemp)
@@ -57,13 +62,14 @@ github_sync_workflow_process_projects_helper() {
     mv "$temp_meta" "$meta_file"
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Updated meta.json:" >&2
+        echo "DEBUG: process_projects_helper - Updated meta.json:" >&2
         jq '.custom_repo_name, .custom_private' "$meta_file" >&2
     fi
     
-    # Step 2c: Push to GitHub
+    # Step 2c: Push to GitHub - export DEBUG so github_pusher sees it
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Pushing to GitHub as $github_user/$repo_name" >&2
+        echo "DEBUG: process_projects_helper - Pushing to GitHub as $github_user/$repo_name" >&2
+        export DEBUG=true
     fi
     
     local github_url

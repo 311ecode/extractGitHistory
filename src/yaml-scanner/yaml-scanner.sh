@@ -13,9 +13,10 @@ yaml_scanner() {
     fi
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Scanning YAML file: $yaml_file" >&2
+        echo "DEBUG: yaml_scanner - Scanning YAML file: $yaml_file" >&2
         echo "DEBUG: YAML contents:" >&2
         cat "$yaml_file" >&2
+        echo "DEBUG: ---" >&2
     fi
     
     # Parse and validate YAML
@@ -69,6 +70,10 @@ yaml_scanner() {
     local first=true
     local failed_count=0
     for ((i=0; i<project_count; i++)); do
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Processing project $i..." >&2
+        fi
+        
         local project_json
         project_json=$(yaml_scanner_extract_project "$yaml_file" "$github_user" "$i" "$debug")
         
@@ -86,6 +91,11 @@ yaml_scanner() {
     
     # End JSON array
     json_content+=$'\n'"]"
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Final JSON content:" >&2
+        echo "$json_content" | jq '.' >&2
+    fi
     
     # Check if all projects failed
     if [[ $failed_count -gt 0 ]]; then
@@ -107,6 +117,11 @@ yaml_scanner() {
         
         if [[ $? -eq 0 ]]; then
             echo "JSON output saved to: $json_output" >&2
+            
+            if [[ "$debug" == "true" ]]; then
+                echo "DEBUG: Verifying saved file:" >&2
+                cat "$json_output" | jq '.' >&2
+            fi
         else
             echo "ERROR: Failed to write JSON output to: $json_output" >&2
             return 1
