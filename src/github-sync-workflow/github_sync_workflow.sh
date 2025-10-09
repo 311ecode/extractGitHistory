@@ -4,15 +4,20 @@ github_sync_workflow() {
     local dry_run="${2:-false}"
     local debug="${DEBUG:-false}"
     
+    # Normalize debug value
+    if [[ "$debug" == "1" ]]; then
+        debug="true"
+    fi
+    
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Starting GitHub sync workflow" >&2
-        echo "DEBUG: YAML file: $yaml_file" >&2
-        echo "DEBUG: Dry run: $dry_run" >&2
+        echo "DEBUG: github_sync_workflow - Starting GitHub sync workflow" >&2
+        echo "DEBUG: github_sync_workflow - YAML file: $yaml_file" >&2
+        echo "DEBUG: github_sync_workflow - Dry run: $dry_run" >&2
     fi
     
     # Step 1: Scan YAML configuration
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Step 1 - Scanning YAML configuration..." >&2
+        echo "DEBUG: github_sync_workflow - Step 1 - Scanning YAML configuration..." >&2
     fi
     
     if ! yaml_scanner "$yaml_file" >/dev/null 2>&1; then
@@ -36,7 +41,7 @@ github_sync_workflow() {
     fi
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Projects JSON: $json_output" >&2
+        echo "DEBUG: github_sync_workflow - Projects JSON: $json_output" >&2
     fi
     
     # Process projects using helper function

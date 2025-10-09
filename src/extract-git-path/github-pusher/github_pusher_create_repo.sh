@@ -11,6 +11,7 @@ github_pusher_create_repo() {
     if [[ "$dry_run" == "true" ]]; then
         echo "[DRY RUN] Would create repository: $owner/$repo_name" >&2
         echo "[DRY RUN] Description: $description" >&2
+        echo "[DRY RUN] Private: $private" >&2
         echo "https://github.com/$owner/$repo_name"
         return 0
     fi
@@ -29,12 +30,21 @@ github_pusher_create_repo() {
         private_bool="true"
     fi
     
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Private (boolean for JSON): $private_bool" >&2
+    fi
+    
     local payload
     payload=$(jq -n \
         --arg name "$repo_name" \
         --arg desc "$description" \
         --argjson private "$private_bool" \
         '{name: $name, description: $desc, private: $private, auto_init: false}')
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: JSON payload:" >&2
+        echo "$payload" | jq '.' >&2
+    fi
     
     # Determine API endpoint - organization vs user
     local api_url
@@ -53,6 +63,7 @@ github_pusher_create_repo() {
         api_url="https://api.github.com/orgs/$owner/repos"
         if [[ "$debug" == "true" ]]; then
             echo "DEBUG: Creating organization repository" >&2
+            echo "DEBUG: Note: Organization default visibility settings may override this" >&2
         fi
     fi
     
@@ -63,6 +74,11 @@ github_pusher_create_repo() {
         -d "$payload" \
         "$api_url")
     
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: API response:" >&2
+        echo "$response" | jq '.' >&2
+    fi
+    
     local repo_url
     repo_url=$(echo "$response" | jq -r '.html_url')
     
@@ -70,6 +86,18 @@ github_pusher_create_repo() {
         echo "ERROR: Failed to create repository" >&2
         echo "Response: $response" >&2
         return 1
+    fi
+    
+    # Verify the created repository's actual visibility
+    if [[ "$debug" == "true" ]]; then
+        local actual_private
+        actual_private=$(echo "$response" | jq -r '.private')
+        echo "DEBUG: Requested private=$private_bool, actual private=$actual_private" >&2
+        
+        if [[ "$actual_private" != "$private_bool" ]]; then
+            echo "DEBUG: WARNING - Repository visibility does not match request!" >&2
+            echo "DEBUG: This may be due to organization settings" >&2
+        fi
     fi
     
     echo "$repo_url"
