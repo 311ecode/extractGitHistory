@@ -15,9 +15,12 @@ json_output: /path/to/output/projects.json  # Optional
 projects:
   - path: /home/user/projects/repo1
     repo_name: custom-repo-1
+    private: false  # Optional, defaults to true
+    forcePush: false  # Optional, defaults to true
   - path: /home/user/projects/repo2
   - path: /path/to/another-project
     repo_name: special-name
+    forcePush: true  # Force push even if remote has changes
 ```
 
 ### Configuration Fields
@@ -27,6 +30,8 @@ projects:
 - **`projects`** (required): Array of project configurations
   - **`path`** (required): Absolute path to the local repository
   - **`repo_name`** (optional): Custom repository name. If omitted, derived from the directory name
+  - **`private`** (optional): Whether the repository should be private. Defaults to `true`
+  - **`forcePush`** (optional): Whether to force push to GitHub. Defaults to `true`. When `false`, push will fail if remote has diverged
 
 ## Dependencies
 
@@ -80,12 +85,16 @@ The scanner outputs JSON (to stdout or file):
   {
     "github_user": "your-username",
     "path": "/home/user/projects/repo1",
-    "repo_name": "custom-repo-1"
+    "repo_name": "custom-repo-1",
+    "private": "false",
+    "forcePush": "false"
   },
   {
     "github_user": "your-username",
     "path": "/home/user/projects/repo2",
-    "repo_name": "repo2"
+    "repo_name": "repo2",
+    "private": "true",
+    "forcePush": "true"
   }
 ]
 ```

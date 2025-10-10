@@ -21,6 +21,9 @@ github_sync_workflow_process_projects_helper() {
     local private
     private=$(echo "$project" | jq -r '.private')
     
+    local forcePush
+    forcePush=$(echo "$project" | jq -r '.forcePush')
+    
     # Step 2a: Extract git history
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: process_projects_helper - Extracting git history from: $path" >&2
@@ -47,23 +50,25 @@ github_sync_workflow_process_projects_helper() {
         echo "DEBUG: process_projects_helper - Meta file created: $meta_file" >&2
     fi
     
-    # Step 2b: Inject custom repo_name and private setting into meta.json
+    # Step 2b: Inject custom repo_name, private setting, and forcePush into meta.json
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: process_projects_helper - Injecting custom repo_name: $repo_name" >&2
         echo "DEBUG: process_projects_helper - Injecting private setting: $private" >&2
+        echo "DEBUG: process_projects_helper - Injecting forcePush setting: $forcePush" >&2
     fi
     
     local temp_meta=$(mktemp)
-    # Keep private as string for GitHub API compatibility
+    # Keep private and forcePush as strings for GitHub API compatibility
     jq --arg repo_name "$repo_name" \
        --arg private "$private" \
-       '.custom_repo_name = $repo_name | .custom_private = $private' \
+       --arg forcePush "$forcePush" \
+       '.custom_repo_name = $repo_name | .custom_private = $private | .custom_forcePush = $forcePush' \
        "$meta_file" > "$temp_meta"
     mv "$temp_meta" "$meta_file"
     
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: process_projects_helper - Updated meta.json:" >&2
-        jq '.custom_repo_name, .custom_private' "$meta_file" >&2
+        jq '.custom_repo_name, .custom_private, .custom_forcePush' "$meta_file" >&2
     fi
     
     # Step 2c: Push to GitHub - export DEBUG so github_pusher sees it

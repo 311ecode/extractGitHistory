@@ -56,6 +56,17 @@ github_pusher() {
         private="true"
     fi
     
+    # Get forcePush setting (default to "true" as string)
+    local forcePush
+    forcePush=$(jq -r '.custom_forcePush // "true"' "$meta_file")
+    
+    # Normalize string value
+    if [[ "$forcePush" == "false" ]] || [[ "$forcePush" == "False" ]] || [[ "$forcePush" == "FALSE" ]]; then
+        forcePush="false"
+    else
+        forcePush="true"
+    fi
+    
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: github_pusher - Generated repo name: $repo_name" >&2
         echo "DEBUG: github_pusher - Target: $github_user/$repo_name" >&2
@@ -63,6 +74,8 @@ github_pusher() {
         echo "DEBUG: github_pusher - Description: $description" >&2
         echo "DEBUG: github_pusher - custom_private from meta: $(jq -r '.custom_private // "true"' "$meta_file")" >&2
         echo "DEBUG: github_pusher - Private setting (normalized): $private" >&2
+        echo "DEBUG: github_pusher - custom_forcePush from meta: $(jq -r '.custom_forcePush // "true"' "$meta_file")" >&2
+        echo "DEBUG: github_pusher - Force push setting (normalized): $forcePush" >&2
     fi
     
     local repo_url
@@ -127,9 +140,9 @@ EOF
         return 0
     fi
     
-    # Push git history
-    echo "Pushing git history..." >&2
-    if ! github_pusher_push_git_history "$extracted_repo_path" "$github_user" "$repo_name" "$github_token" "$debug" "$dry_run"; then
+    # Push git history - now passing meta_file as 7th argument
+    echo "Pushing git history (forcePush=$forcePush)..." >&2
+    if ! github_pusher_push_git_history "$extracted_repo_path" "$github_user" "$repo_name" "$github_token" "$debug" "$dry_run" "$meta_file"; then
         if [[ "$repo_existed" == false ]]; then
             echo "WARNING: Created repo but failed to push - cleaning up..." >&2
             github_pusher_delete_repo "$github_user" "$repo_name" "$github_token" "$debug"
