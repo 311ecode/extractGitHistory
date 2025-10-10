@@ -42,18 +42,23 @@ github_sync_workflow_process_projects() {
         local private
         private=$(echo "$project" | jq -r '.private')
         
+        local forcePush
+        forcePush=$(echo "$project" | jq -r '.forcePush')
+        
         if [[ "$debug" == "true" ]]; then
             echo "DEBUG: Extracted values:" >&2
             echo "DEBUG:   github_user='$github_user'" >&2
             echo "DEBUG:   path='$path'" >&2
             echo "DEBUG:   repo_name='$repo_name'" >&2
             echo "DEBUG:   private='$private'" >&2
+            echo "DEBUG:   forcePush='$forcePush'" >&2
         fi
         
         echo "========================================" >&2
         echo "Processing: $github_user/$repo_name" >&2
         echo "Path: $path" >&2
         echo "Private: $private" >&2
+        echo "Force Push: $forcePush" >&2
         echo "========================================" >&2
         
         # Process individual project

@@ -100,14 +100,58 @@ yaml_scanner_extract_project() {
         echo "DEBUG: Final private value: '$private'" >&2
     fi
     
-    # Build JSON object with private as string
+    # Extract forcePush setting with proper boolean handling
+    local forcePush
+    local forcePush_raw
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Extracting forcePush field from YAML..." >&2
+    fi
+    
+    forcePush_raw=$(yq -r ".projects[$index].forcePush" "$yaml_file")
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: forcePush yq returned: '$forcePush_raw'" >&2
+    fi
+    
+    if [[ -z "$forcePush_raw" ]] || [[ "$forcePush_raw" == "null" ]]; then
+        # Not specified - default to "true"
+        forcePush="true"
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: No forcePush setting found, defaulting to 'true'" >&2
+        fi
+    else
+        # Normalize the value
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Normalizing forcePush value: '$forcePush_raw'" >&2
+        fi
+        
+        if [[ "$forcePush_raw" == "false" ]] || [[ "$forcePush_raw" == "False" ]] || [[ "$forcePush_raw" == "FALSE" ]]; then
+            forcePush="false"
+            if [[ "$debug" == "true" ]]; then
+                echo "DEBUG: Normalized forcePush to 'false'" >&2
+            fi
+        else
+            forcePush="true"
+            if [[ "$debug" == "true" ]]; then
+                echo "DEBUG: Normalized forcePush to 'true' (from: '$forcePush_raw')" >&2
+            fi
+        fi
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Final forcePush value: '$forcePush'" >&2
+    fi
+    
+    # Build JSON object with private and forcePush as strings
     local json_output
     json_output=$(cat <<EOF
 {
   "github_user": "$github_user",
   "path": "$resolved_path",
   "repo_name": "$repo_name",
-  "private": "$private"
+  "private": "$private",
+  "forcePush": "$forcePush"
 }
 EOF
 )
