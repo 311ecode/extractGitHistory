@@ -17,10 +17,14 @@ projects:
     repo_name: custom-repo-1
     private: false  # Optional, defaults to true
     forcePush: false  # Optional, defaults to true
+    githubPages: true  # Optional, defaults to false
+    githubPagesBranch: main  # Optional, defaults to main (only used if githubPages=true)
+    githubPagesPath: /  # Optional, defaults to / (only used if githubPages=true)
   - path: /home/user/projects/repo2
   - path: /path/to/another-project
     repo_name: special-name
-    forcePush: true  # Force push even if remote has changes
+    githubPages: true
+    githubPagesPath: /docs  # Serve Pages from /docs folder
 ```
 
 ### Configuration Fields
@@ -32,6 +36,39 @@ projects:
   - **`repo_name`** (optional): Custom repository name. If omitted, derived from the directory name
   - **`private`** (optional): Whether the repository should be private. Defaults to `true`
   - **`forcePush`** (optional): Whether to force push to GitHub. Defaults to `true`. When `false`, push will fail if remote has diverged
+  - **`githubPages`** (optional): Whether to enable GitHub Pages. Defaults to `false`
+  - **`githubPagesBranch`** (optional): Branch to serve Pages from. Defaults to `main`. Only used if `githubPages: true`
+  - **`githubPagesPath`** (optional): Path within branch to serve Pages from. Defaults to `/` (root). Common values: `/`, `/docs`. Only used if `githubPages: true`
+
+### GitHub Pages Configuration
+
+GitHub Pages can be enabled and configured per project:
+
+```yaml
+projects:
+  # Simple: Enable Pages with defaults (main branch, root path)
+  - path: /home/user/website
+    repo_name: my-site
+    githubPages: true
+
+  # Advanced: Custom branch and path
+  - path: /home/user/docs-site
+    repo_name: documentation
+    githubPages: true
+    githubPagesBranch: gh-pages
+    githubPagesPath: /docs
+
+  # Disable Pages explicitly
+  - path: /home/user/backend
+    repo_name: api-server
+    githubPages: false  # or just omit this field
+```
+
+**Important Notes:**
+- If `githubPagesPath` is not `/` (root), the path must exist in your repository
+- The workflow will validate that non-root paths exist before attempting to enable Pages
+- If the path doesn't exist, you'll get an error but other projects will continue processing
+- You can toggle Pages on/off by changing `githubPages: true/false` and re-running the workflow
 
 ## Dependencies
 
@@ -87,14 +124,20 @@ The scanner outputs JSON (to stdout or file):
     "path": "/home/user/projects/repo1",
     "repo_name": "custom-repo-1",
     "private": "false",
-    "forcePush": "false"
+    "forcePush": "false",
+    "githubPages": "true",
+    "githubPagesBranch": "main",
+    "githubPagesPath": "/"
   },
   {
     "github_user": "your-username",
     "path": "/home/user/projects/repo2",
     "repo_name": "repo2",
     "private": "true",
-    "forcePush": "true"
+    "forcePush": "true",
+    "githubPages": "false",
+    "githubPagesBranch": "main",
+    "githubPagesPath": "/"
   }
 ]
 ```
@@ -112,6 +155,9 @@ yaml_scanner | jq -r '.[].path'
 
 # Get specific project
 yaml_scanner | jq -r '.[0]'
+
+# Get projects with Pages enabled
+yaml_scanner | jq -r '.[] | select(.githubPages == "true") | .repo_name'
 ```
 
 When output is saved to file:
@@ -220,10 +266,10 @@ johndoe/frontend -> /home/johndoe/work/frontend
 johndoe/dotfiles -> /home/johndoe/personal/dotfiles
 ```
 
-### File Mode
+### File Mode with GitHub Pages
 
 ```bash
-# Create config with json_output
+# Create config with json_output and Pages enabled
 cat > .github-sync.yaml <<EOF
 github_user: johndoe
 json_output: ~/.config/github-sync/projects.json
@@ -231,7 +277,10 @@ json_output: ~/.config/github-sync/projects.json
 projects:
   - path: /home/johndoe/work/api-server
     repo_name: company-api
-  - path: /home/johndoe/work/frontend
+  - path: /home/johndoe/personal/blog
+    githubPages: true
+    githubPagesBranch: main
+    githubPagesPath: /
 EOF
 
 # Scan and save to file
@@ -239,7 +288,7 @@ yaml_scanner
 # Output: "JSON output saved to: /home/johndoe/.config/github-sync/projects.json"
 
 # Later, read from file
-jq -r '.[].repo_name' ~/.config/github-sync/projects.json
+jq -r '.[] | select(.githubPages == "true") | .repo_name' ~/.config/github-sync/projects.json
 ```
 
 ## License
