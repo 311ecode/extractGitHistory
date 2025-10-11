@@ -143,7 +143,80 @@ yaml_scanner_extract_project() {
         echo "DEBUG: Final forcePush value: '$forcePush'" >&2
     fi
     
-    # Build JSON object with private and forcePush as strings
+    # Extract GitHub Pages settings
+    local githubPages
+    local githubPages_raw
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Extracting githubPages field from YAML..." >&2
+    fi
+    
+    githubPages_raw=$(yq -r ".projects[$index].githubPages" "$yaml_file")
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: githubPages yq returned: '$githubPages_raw'" >&2
+    fi
+    
+    if [[ -z "$githubPages_raw" ]] || [[ "$githubPages_raw" == "null" ]]; then
+        # Not specified - default to "false"
+        githubPages="false"
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: No githubPages setting found, defaulting to 'false'" >&2
+        fi
+    else
+        # Normalize the value
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: Normalizing githubPages value: '$githubPages_raw'" >&2
+        fi
+        
+        if [[ "$githubPages_raw" == "true" ]] || [[ "$githubPages_raw" == "True" ]] || [[ "$githubPages_raw" == "TRUE" ]]; then
+            githubPages="true"
+            if [[ "$debug" == "true" ]]; then
+                echo "DEBUG: Normalized githubPages to 'true'" >&2
+            fi
+        else
+            githubPages="false"
+            if [[ "$debug" == "true" ]]; then
+                echo "DEBUG: Normalized githubPages to 'false' (from: '$githubPages_raw')" >&2
+            fi
+        fi
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Final githubPages value: '$githubPages'" >&2
+    fi
+    
+    # Extract githubPagesBranch - only meaningful if githubPages=true
+    local githubPagesBranch
+    githubPagesBranch=$(yq -r ".projects[$index].githubPagesBranch // empty" "$yaml_file")
+    
+    if [[ -z "$githubPagesBranch" ]] || [[ "$githubPagesBranch" == "null" ]]; then
+        githubPagesBranch="main"  # Default branch
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: No githubPagesBranch specified, defaulting to 'main'" >&2
+        fi
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Final githubPagesBranch value: '$githubPagesBranch'" >&2
+    fi
+    
+    # Extract githubPagesPath - only meaningful if githubPages=true
+    local githubPagesPath
+    githubPagesPath=$(yq -r ".projects[$index].githubPagesPath // empty" "$yaml_file")
+    
+    if [[ -z "$githubPagesPath" ]] || [[ "$githubPagesPath" == "null" ]]; then
+        githubPagesPath="/"  # Default path (root)
+        if [[ "$debug" == "true" ]]; then
+            echo "DEBUG: No githubPagesPath specified, defaulting to '/'" >&2
+        fi
+    fi
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: Final githubPagesPath value: '$githubPagesPath'" >&2
+    fi
+    
+    # Build JSON object with all settings as strings
     local json_output
     json_output=$(cat <<EOF
 {
@@ -151,7 +224,10 @@ yaml_scanner_extract_project() {
   "path": "$resolved_path",
   "repo_name": "$repo_name",
   "private": "$private",
-  "forcePush": "$forcePush"
+  "forcePush": "$forcePush",
+  "githubPages": "$githubPages",
+  "githubPagesBranch": "$githubPagesBranch",
+  "githubPagesPath": "$githubPagesPath"
 }
 EOF
 )

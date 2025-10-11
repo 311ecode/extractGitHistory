@@ -40,7 +40,7 @@ test_githubPusher_updateVisibility() {
     git add . >/dev/null 2>&1
     git commit -m "Test commit" >/dev/null 2>&1
     
-    # Create meta.json with private=false (should make it public)
+    # Create meta.json with private="false" as STRING (should make it public)
     local test_dir=$(mktemp -d)
     local meta_file="$test_dir/extract-git-path-meta.json"
     
@@ -52,7 +52,7 @@ test_githubPusher_updateVisibility() {
   "extracted_repo_path": "$test_repo",
   "extraction_timestamp": "2025-01-15T10:00:00Z",
   "commit_mappings": {},
-  "custom_private": false,
+  "custom_private": "false",
   "sync_status": {
     "synced": false,
     "github_url": null,

@@ -45,6 +45,15 @@ github_sync_workflow_process_projects() {
         local forcePush
         forcePush=$(echo "$project" | jq -r '.forcePush')
         
+        local githubPages
+        githubPages=$(echo "$project" | jq -r '.githubPages')
+        
+        local githubPagesBranch
+        githubPagesBranch=$(echo "$project" | jq -r '.githubPagesBranch')
+        
+        local githubPagesPath
+        githubPagesPath=$(echo "$project" | jq -r '.githubPagesPath')
+        
         if [[ "$debug" == "true" ]]; then
             echo "DEBUG: Extracted values:" >&2
             echo "DEBUG:   github_user='$github_user'" >&2
@@ -52,6 +61,9 @@ github_sync_workflow_process_projects() {
             echo "DEBUG:   repo_name='$repo_name'" >&2
             echo "DEBUG:   private='$private'" >&2
             echo "DEBUG:   forcePush='$forcePush'" >&2
+            echo "DEBUG:   githubPages='$githubPages'" >&2
+            echo "DEBUG:   githubPagesBranch='$githubPagesBranch'" >&2
+            echo "DEBUG:   githubPagesPath='$githubPagesPath'" >&2
         fi
         
         echo "========================================" >&2
@@ -59,6 +71,11 @@ github_sync_workflow_process_projects() {
         echo "Path: $path" >&2
         echo "Private: $private" >&2
         echo "Force Push: $forcePush" >&2
+        if [[ "$githubPages" == "true" ]]; then
+            echo "GitHub Pages: enabled (branch=$githubPagesBranch, path=$githubPagesPath)" >&2
+        else
+            echo "GitHub Pages: disabled" >&2
+        fi
         echo "========================================" >&2
         
         # Process individual project
