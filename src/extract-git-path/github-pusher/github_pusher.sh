@@ -67,6 +67,23 @@ github_pusher() {
         forcePush="true"
     fi
     
+    # Get GitHub Pages settings
+    local githubPages
+    githubPages=$(jq -r '.custom_githubPages // "false"' "$meta_file")
+    
+    # Normalize string value
+    if [[ "$githubPages" == "true" ]] || [[ "$githubPages" == "True" ]] || [[ "$githubPages" == "TRUE" ]]; then
+        githubPages="true"
+    else
+        githubPages="false"
+    fi
+    
+    local githubPagesBranch
+    githubPagesBranch=$(jq -r '.custom_githubPagesBranch // "main"' "$meta_file")
+    
+    local githubPagesPath
+    githubPagesPath=$(jq -r '.custom_githubPagesPath // "/"' "$meta_file")
+    
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: github_pusher - Generated repo name: $repo_name" >&2
         echo "DEBUG: github_pusher - Target: $github_user/$repo_name" >&2
@@ -76,6 +93,9 @@ github_pusher() {
         echo "DEBUG: github_pusher - Private setting (normalized): $private" >&2
         echo "DEBUG: github_pusher - custom_forcePush from meta: $(jq -r '.custom_forcePush // "true"' "$meta_file")" >&2
         echo "DEBUG: github_pusher - Force push setting (normalized): $forcePush" >&2
+        echo "DEBUG: github_pusher - GitHub Pages enabled: $githubPages" >&2
+        echo "DEBUG: github_pusher - GitHub Pages branch: $githubPagesBranch" >&2
+        echo "DEBUG: github_pusher - GitHub Pages path: $githubPagesPath" >&2
     fi
     
     local repo_url
@@ -137,6 +157,12 @@ github_pusher() {
   }
 }
 EOF
+        if [[ "$githubPages" == "true" ]]; then
+            echo ""
+            echo "[DRY RUN] Would enable GitHub Pages:"
+            echo "  Branch: $githubPagesBranch"
+            echo "  Path: $githubPagesPath"
+        fi
         return 0
     fi
     
@@ -151,6 +177,18 @@ EOF
     fi
     
     echo "✓ Git history pushed successfully" >&2
+    
+    # Enable GitHub Pages if requested
+    if [[ "$githubPages" == "true" ]]; then
+        echo "Enabling GitHub Pages (branch=$githubPagesBranch, path=$githubPagesPath)..." >&2
+        if github_pusher_enable_pages "$github_user" "$repo_name" "$githubPagesBranch" "$githubPagesPath" "$github_token" "$debug" "$extracted_repo_path"; then
+            echo "✓ GitHub Pages enabled successfully" >&2
+        else
+            echo "⚠ Could not enable GitHub Pages" >&2
+            echo "⚠ You may need to enable it manually at: $repo_url/settings/pages" >&2
+            # Don't fail the entire operation if Pages fails
+        fi
+    fi
     
     # Update meta.json with sync status
     if ! github_pusher_update_meta_json "$meta_file" "$repo_url" "$github_user" "$repo_name" "$github_user" "$debug"; then

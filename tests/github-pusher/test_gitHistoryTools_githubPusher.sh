@@ -12,6 +12,9 @@ test_gitHistoryTools_githubPusher() {
         "test_githubPusher_updatesMetaJson"
         "test_githubPusher_readmeDescription"
         "test_githubPusher_updateVisibility"
+        "test_githubPusher_enablePages"
+        "test_githubPusher_pagesPathValidation"
+        "test_githubPusher_pagesCustomPath"
     )
     
     local ignored_tests=()

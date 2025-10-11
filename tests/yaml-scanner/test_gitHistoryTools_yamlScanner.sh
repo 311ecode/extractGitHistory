@@ -10,6 +10,8 @@ test_gitHistoryTools_yamlScanner() {
         "test_yamlScanner_relativePaths"
         "test_yamlScanner_mixedPaths"
         "test_yamlScanner_invalidRelativePath"
+        "test_yamlScanner_githubPagesDefaults"
+        "test_yamlScanner_githubPagesCustom"
     )
     
     local ignored_tests=()
