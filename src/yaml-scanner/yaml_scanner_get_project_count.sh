@@ -2,5 +2,5 @@
 yaml_scanner_get_project_count() {
     local yaml_file="$1"
     
-    yq -r '.projects | length' "$yaml_file"
+    yq eval '.projects | length' "$yaml_file"
 }

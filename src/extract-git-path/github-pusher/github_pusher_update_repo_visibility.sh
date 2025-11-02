@@ -32,24 +32,23 @@ github_pusher_update_repo_visibility() {
         echo "DEBUG: update_repo_visibility - Sending PATCH request to: https://api.github.com/repos/$owner/$repo_name" >&2
     fi
     
-    local response
+    local temp_response
     local http_code
     
-    # Capture both response body and HTTP status code
-    response=$(curl -s -w "\n%{http_code}" -X PATCH \
+    # Use a temporary file to capture the response properly
+    temp_response=$(mktemp)
+    
+    # Capture HTTP status code separately from body
+    http_code=$(curl -s -w "%{http_code}" -o "$temp_response" -X PATCH \
         -H "Authorization: token $github_token" \
         -H "Accept: application/vnd.github.v3+json" \
         -d "$payload" \
         "https://api.github.com/repos/$owner/$repo_name")
     
-    # Split response into body and status code
-    http_code=$(echo "$response" | tail -n1)
-    response=$(echo "$response" | sed '$d')
-    
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: update_repo_visibility - HTTP Status Code: $http_code" >&2
         echo "DEBUG: update_repo_visibility - Response body:" >&2
-        echo "$response" | jq '.' 2>/dev/null || echo "$response" >&2
+        jq '.' "$temp_response" 2>/dev/null || cat "$temp_response" >&2
         echo "DEBUG: update_repo_visibility - ---" >&2
     fi
     
@@ -59,7 +58,7 @@ github_pusher_update_repo_visibility() {
         
         # Try to parse error message
         local error_message
-        error_message=$(echo "$response" | jq -r '.message // empty' 2>/dev/null)
+        error_message=$(jq -r '.message // empty' "$temp_response" 2>/dev/null)
         
         if [[ -n "$error_message" ]]; then
             echo "ERROR: GitHub API error: $error_message" >&2
@@ -75,24 +74,34 @@ github_pusher_update_repo_visibility() {
         
         # Check for documentation_url
         local docs_url
-        docs_url=$(echo "$response" | jq -r '.documentation_url // empty' 2>/dev/null)
+        docs_url=$(jq -r '.documentation_url // empty' "$temp_response" 2>/dev/null)
         if [[ -n "$docs_url" ]]; then
             echo "ERROR: See: $docs_url" >&2
         fi
         
+        rm -f "$temp_response"
         return 1
     fi
     
-    # Check if update was successful by reading the updated value
-    local updated_private
-    updated_private=$(echo "$response" | jq -r '.private // empty')
-    
-    if [[ -z "$updated_private" ]]; then
+    # Check if response is valid JSON and contains the private field
+    # Use 'has' instead of -e to check for field existence without testing truthiness
+    if ! jq -e 'has("private")' "$temp_response" >/dev/null 2>&1; then
         echo "ERROR: Failed to read updated visibility from response" >&2
         if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: update_repo_visibility - Response was empty or invalid JSON" >&2
+            echo "DEBUG: update_repo_visibility - Response missing .private field" >&2
+            echo "DEBUG: update_repo_visibility - Raw response:" >&2
+            cat "$temp_response" >&2
         fi
+        rm -f "$temp_response"
         return 1
+    fi
+    
+    # Read the updated value
+    local updated_private
+    updated_private=$(jq -r '.private' "$temp_response")
+    
+    if [[ "$debug" == "true" ]]; then
+        echo "DEBUG: update_repo_visibility - Extracted .private value: '$updated_private'" >&2
     fi
     
     # Convert boolean back to string for comparison
@@ -102,7 +111,9 @@ github_pusher_update_repo_visibility() {
     elif [[ "$updated_private" == "false" ]]; then
         updated_private_str="false"
     else
-        updated_private_str=""
+        echo "ERROR: Unexpected private value from API: '$updated_private'" >&2
+        rm -f "$temp_response"
+        return 1
     fi
     
     if [[ "$debug" == "true" ]]; then
@@ -110,7 +121,7 @@ github_pusher_update_repo_visibility() {
         echo "DEBUG: update_repo_visibility - Requested private value: $private" >&2
     fi
     
-    if [[ -n "$updated_private_str" ]] && [[ "$updated_private_str" != "$private" ]]; then
+    if [[ "$updated_private_str" != "$private" ]]; then
         echo "WARNING: Repository visibility mismatch!" >&2
         echo "WARNING: Requested: private=$private, Got: private=$updated_private_str" >&2
         echo "WARNING: This may be due to organization permissions or token scope" >&2
@@ -120,12 +131,16 @@ github_pusher_update_repo_visibility() {
             echo "DEBUG: update_repo_visibility - This usually means organization settings override the request" >&2
         fi
         
+        rm -f "$temp_response"
         return 1
     fi
     
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: update_repo_visibility - Successfully updated visibility to private=$updated_private_str" >&2
     fi
+    
+    # Clean up temp file
+    rm -f "$temp_response"
     
     return 0
 }
