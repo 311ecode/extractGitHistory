@@ -9,12 +9,12 @@ yaml_scanner_parse_config() {
     
     # Check if yq is installed
     if ! command -v yq >/dev/null 2>&1; then
-        echo "ERROR: yq is not installed (install: pip install yq)" >&2
+        echo "ERROR: yq is not installed" >&2
         return 1
     fi
     
-    # Validate YAML syntax
-    if ! yq empty "$yaml_file" >/dev/null 2>&1; then
+    # Validate YAML syntax (yq v4 syntax)
+    if ! yq eval '.' "$yaml_file" >/dev/null 2>&1; then
         echo "ERROR: Invalid YAML syntax in $yaml_file" >&2
         return 1
     fi

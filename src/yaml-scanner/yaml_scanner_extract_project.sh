@@ -11,9 +11,9 @@ yaml_scanner_extract_project() {
     
     # Extract project path and repo_name
     local path
-    path=$(yq -r ".projects[$index].path // empty" "$yaml_file")
+    path=$(yq eval ".projects[$index].path" "$yaml_file")
     
-    if [[ -z "$path" ]]; then
+    if [[ -z "$path" ]] || [[ "$path" == "null" ]]; then
         echo "ERROR: Project at index $index has no path" >&2
         return 1
     fi
@@ -48,9 +48,9 @@ yaml_scanner_extract_project() {
     
     # Extract repo_name or derive from path
     local repo_name
-    repo_name=$(yq -r ".projects[$index].repo_name // empty" "$yaml_file")
+    repo_name=$(yq eval ".projects[$index].repo_name" "$yaml_file")
     
-    if [[ -z "$repo_name" ]]; then
+    if [[ -z "$repo_name" ]] || [[ "$repo_name" == "null" ]]; then
         repo_name=$(basename "$resolved_path")
     fi
     
@@ -61,10 +61,10 @@ yaml_scanner_extract_project() {
     # First, check what yq actually returns
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: Extracting private field from YAML..." >&2
-        echo "DEBUG: Running: yq -r '.projects[$index].private' \"$yaml_file\"" >&2
+        echo "DEBUG: Running: yq eval '.projects[$index].private' \"$yaml_file\"" >&2
     fi
     
-    private_raw=$(yq -r ".projects[$index].private" "$yaml_file")
+    private_raw=$(yq eval ".projects[$index].private" "$yaml_file")
     
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: yq returned: '$private_raw' (type: $(printf '%s' "$private_raw" | wc -c) chars)" >&2
@@ -108,7 +108,7 @@ yaml_scanner_extract_project() {
         echo "DEBUG: Extracting forcePush field from YAML..." >&2
     fi
     
-    forcePush_raw=$(yq -r ".projects[$index].forcePush" "$yaml_file")
+    forcePush_raw=$(yq eval ".projects[$index].forcePush" "$yaml_file")
     
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: forcePush yq returned: '$forcePush_raw'" >&2
@@ -151,7 +151,7 @@ yaml_scanner_extract_project() {
         echo "DEBUG: Extracting githubPages field from YAML..." >&2
     fi
     
-    githubPages_raw=$(yq -r ".projects[$index].githubPages" "$yaml_file")
+    githubPages_raw=$(yq eval ".projects[$index].githubPages" "$yaml_file")
     
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: githubPages yq returned: '$githubPages_raw'" >&2
@@ -188,7 +188,7 @@ yaml_scanner_extract_project() {
     
     # Extract githubPagesBranch - only meaningful if githubPages=true
     local githubPagesBranch
-    githubPagesBranch=$(yq -r ".projects[$index].githubPagesBranch // empty" "$yaml_file")
+    githubPagesBranch=$(yq eval ".projects[$index].githubPagesBranch" "$yaml_file")
     
     if [[ -z "$githubPagesBranch" ]] || [[ "$githubPagesBranch" == "null" ]]; then
         githubPagesBranch="main"  # Default branch
@@ -203,7 +203,7 @@ yaml_scanner_extract_project() {
     
     # Extract githubPagesPath - only meaningful if githubPages=true
     local githubPagesPath
-    githubPagesPath=$(yq -r ".projects[$index].githubPagesPath // empty" "$yaml_file")
+    githubPagesPath=$(yq eval ".projects[$index].githubPagesPath" "$yaml_file")
     
     if [[ -z "$githubPagesPath" ]] || [[ "$githubPagesPath" == "null" ]]; then
         githubPagesPath="/"  # Default path (root)
