@@ -3,7 +3,7 @@
 
 
 yaml_scanner() {
-    eval "$(markdown-show-help-registration --minimum-parameters 0)"
+    command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 0)"
     
     local yaml_file="${1:-.github-sync.yaml}"
     local debug="${DEBUG:-false}"
