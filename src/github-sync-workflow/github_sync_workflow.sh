@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 github_sync_workflow() {
-    eval "$(markdown-show-help-registration)"
+    command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration)"
     local yaml_file="${1:-.github-sync.yaml}"
     local dry_run="${2:-false}"
     local debug="${DEBUG:-false}"
