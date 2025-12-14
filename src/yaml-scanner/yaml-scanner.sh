@@ -68,18 +68,20 @@ yaml_scanner() {
     # Start JSON array
     json_content+="["$'\n'
     
-    # Extract each project and track failures
+    # Extract each project and fail fast if an error occurs.
     local first=true
-    local failed_count=0
     for ((i=0; i<project_count; i++)); do
         if [[ "$debug" == "true" ]]; then
             echo "DEBUG: Processing project $i..." >&2
         fi
         
         local project_json
+        # IMPORTANT: Output of extract_project is redirected to json_content (stdout).
+        # Errors are already written to stderr in extract_project.
         project_json=$(yaml_scanner_extract_project "$yaml_file" "$github_user" "$i" "$debug")
+        local extract_exit_code=$?
         
-        if [[ $? -eq 0 ]]; then
+        if [[ $extract_exit_code -eq 0 ]]; then
             if [[ "$first" == "true" ]]; then
                 first=false
             else
@@ -87,7 +89,10 @@ yaml_scanner() {
             fi
             json_content+="$(echo "$project_json" | sed 's/^/  /')"  # Indent for array
         else
-            ((failed_count++))
+            # Fail fast. The specific error message was already printed to stderr by
+            # yaml_scanner_extract_project. We simply exit 1 now.
+            echo "ERROR: YAML scan halted due to project validation failure." >&2
+            return 1
         fi
     done
     
@@ -97,12 +102,6 @@ yaml_scanner() {
     if [[ "$debug" == "true" ]]; then
         echo "DEBUG: Final JSON content:" >&2
         echo "$json_content" | jq '.' >&2
-    fi
-    
-    # Check if all projects failed
-    if [[ $failed_count -gt 0 ]]; then
-        echo "ERROR: Failed to process $failed_count project(s)" >&2
-        return 1
     fi
     
     # Output or save JSON
