@@ -21,7 +21,9 @@ github_sync_workflow() {
         echo "DEBUG: github_sync_workflow - Step 1 - Scanning YAML configuration..." >&2
     fi
     
-    if ! yaml_scanner "$yaml_file" >/dev/null 2>&1; then
+    # TEMPORARY CHANGE: Removed output redirection (>/dev/null 2>&1)
+    # to allow error messages from yaml_scanner to pass through.
+    if ! yaml_scanner "$yaml_file"; then
         echo "ERROR: YAML scanning failed" >&2
         return 1
     fi
