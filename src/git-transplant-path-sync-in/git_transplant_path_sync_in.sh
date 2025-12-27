@@ -1,78 +1,66 @@
 #!/usr/bin/env bash
 
 git_transplant_path_sync_in() {
-  command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 2)"
-  
   local meta_json="$1"
   local poly_url="$2"
   local debug="${DEBUG:-}"
+  local run_id=$(head /dev/urandom | tr -dc a-z0-9 | head -c 6)
 
-  if [[ ! -f "$meta_json" ]]; then
-    echo "❌ ERROR: Metadata file not found: $meta_json" >&2
-    return 1
-  fi
-
-  # 1. Extract state
-  local rel_path
-  rel_path=$(jq -r '.relative_path' "$meta_json")
-  local last_mono_hash
-  last_mono_hash=$(jq -r '.git_transplant_path_sync_in.last_synced_mono_hash // empty' "$meta_json")
+  # 1. Capture State
+  local rel_path=$(jq -r '.relative_path' "$meta_json")
+  local current_branch=$(git rev-parse --abbrev-ref HEAD)
   
-  [[ -n "$debug" ]] && echo "🧪 DEBUG: Syncing Polyrepo ($poly_url) -> Monorepo ($rel_path)" >&2
-
-  # 2. Divergence Check
-  local current_mono_hash
-  current_mono_hash=$(git log -n 1 --pretty=format:%H -- "$rel_path" 2>/dev/null)
-  
-  if [[ -n "$last_mono_hash" && "$current_mono_hash" != "$last_mono_hash" ]]; then
-    echo "❌ ERROR: Monorepo directory '$rel_path' has diverged since last sync." >&2
-    return 1
-  fi
-
-  # 3. Fetch from Polyrepo
-  local temp_remote="sync_remote_$(date +%s)"
+  # 2. Fetch Polyrepo
+  local temp_remote="sync_remote_${run_id}"
   git remote add "$temp_remote" "$poly_url"
   git fetch "$temp_remote" --quiet
 
-  # 4. Identify Polyrepo Head
+  # FIX: Use --verify and -q to ensure a single-line clean hash
   local poly_head
-  poly_head=$(git rev-parse "$temp_remote/main" 2>/dev/null || git rev-parse "$temp_remote/master" 2>/dev/null)
+  poly_head=$(git rev-parse -q --verify "$temp_remote/main^{commit}" 2>/dev/null || \
+              git rev-parse -q --verify "$temp_remote/master^{commit}" 2>/dev/null)
   
   if [[ -z "$poly_head" ]]; then
-    echo "❌ ERROR: Could not find main/master branch in $poly_url" >&2
+    echo "❌ ERROR: Could not resolve Polyrepo HEAD" >&2
     git remote remove "$temp_remote"
     return 1
   fi
 
-  # 5. Merge Strategy
-  # We use 'subtree' merge strategy or a recursive merge with path prefixing 
-  # to ensure changes from the polyrepo (which are at the root) land in the rel_path.
-  git merge -X subtree="$rel_path" "$poly_head" --allow-unrelated-histories --no-edit -m "sync-in: updates from polyrepo to $rel_path"
+  # 3. Path Transformation
+  local scratch_branch="scratch_sync_${run_id}"
+  # Ensure we stop if the checkout fails
+  if ! git checkout -b "$scratch_branch" "$poly_head" --quiet; then
+      echo "❌ ERROR: Failed to create scratch branch from $poly_head" >&2
+      return 1
+  fi
+  
+  [[ -n "$debug" ]] && echo "🧪 DEBUG: Prefixing history with $rel_path" >&2
+  git filter-repo --to-subdirectory-filter "$rel_path" --force --quiet
 
-  # 6. Update Metadata
-  local current_head
-  current_head=$(git rev-parse HEAD)
-  local cmd_str="git-transplant-path-sync-in $meta_json $poly_url"
-  local timestamp
-  timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+  local prepared_head=$(git rev-parse HEAD)
 
-  local updated_meta
-  updated_meta=$(jq --arg poly "$poly_head" \
+  # 4. Adoption (Mirroring)
+  git checkout "$current_branch" --quiet
+  git reset --hard "$prepared_head" --quiet
+
+  # 5. Metadata Update
+  local current_head=$(git rev-parse HEAD)
+  local updated_meta=$(jq --arg poly "$poly_head" \
                     --arg mono "$current_head" \
                     --arg url "$poly_url" \
-                    --arg cmd "$cmd_str" \
-                    --arg ts "$timestamp" \
+                    --arg ts "$(date -u +"%Y-%m-%dT%H:%M:%SZ")" \
                     '.git_transplant_path_sync_in = {
                         "last_run_timestamp": $ts,
                         "remote_url": $url,
                         "last_synced_poly_hash": $poly,
-                        "last_synced_mono_hash": $mono,
-                        "command_used": $cmd
+                        "last_synced_mono_hash": $mono
                       }' "$meta_json")
   
   echo "$updated_meta" > "$meta_json"
-  git remote remove "$temp_remote"
   
-  [[ -n "$debug" ]] && echo "✅ SUCCESS: Synced $poly_head into $rel_path" >&2
+  # 6. Cleanup
+  git remote remove "$temp_remote"
+  git branch -D "$scratch_branch" --quiet 2>/dev/null || true
+  
   return 0
 }
