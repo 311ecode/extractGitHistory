@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 
 git_transplant_path_sync_in() {
+    command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 2)"
+
   local meta_json="$1"
   local poly_url="$2"
   local debug="${DEBUG:-}"
