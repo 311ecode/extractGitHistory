@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 extract_git_path() {
+  command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 1)"
   local target_path="$1"
   local abs_path
   local repo_root
