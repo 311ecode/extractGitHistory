@@ -10,9 +10,10 @@ testAllGitPathMove() {
     "testInterRepoMoveSafety" 
     "testDeepIntraRepoMove" 
     "testRelativeUpwardMove"
+    "testShadingBypass"
+    "testRegistrationLifecycle"
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
   cd "$OLDPWD"
-
 }
