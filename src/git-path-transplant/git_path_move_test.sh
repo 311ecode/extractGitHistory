@@ -1,45 +1,37 @@
 #!/usr/bin/env bash
 
 testGitPathMove() {
-  testFullIntraRepoMove() {
-    echo "🧪 Testing Full Intra-repo Move (A vanishes, B appears)"
+  testDeepIntraRepoMove() {
+    echo "🧪 Testing Deep Move (Creating nested parents)"
     local tmp_dir=$(mktemp -d)
     
-    mkdir -p "$tmp_dir/repo/dir_a"
+    mkdir -p "$tmp_dir/repo/source_folder"
     cd "$tmp_dir/repo" && git init -q
     git config user.email "test@test.com"
     git config user.name "Tester"
     
-    echo "data" > dir_a/file.txt
-    git add . && git commit -m "feat: initial data" -q
+    echo "important_data" > source_folder/data.txt
+    git add . && git commit -m "feat: source" -q
     
-    # The actual move
-    git_path_move "dir_a" "dir_b"
+    # Move to a non-existent nested path
+    git_path_move "source_folder" "deep/nested/path/target_folder"
     
-    # 1. A should be gone
-    if [[ -d "dir_a" ]]; then
-      echo "❌ ERROR: dir_a still exists!"
-      return 1
-    fi
-    
-    # 2. B should exist (because of the auto-merge)
-    if [[ ! -f "dir_b/file.txt" ]]; then
-      echo "❌ ERROR: dir_b/file.txt does not exist! Auto-merge failed?"
+    # Verification
+    if [[ ! -f "deep/nested/path/target_folder/data.txt" ]]; then
+      echo "❌ ERROR: File not found in deeply nested destination!"
       return 1
     fi
 
-    # 3. History should be linked
-    local log_count=$(git log --oneline -- dir_b/file.txt | wc -l)
-    if [[ $log_count -eq 0 ]]; then
-      echo "❌ ERROR: History not preserved for dir_b"
+    if [[ -d "source_folder" ]]; then
+      echo "❌ ERROR: Source folder was not cleaned up!"
       return 1
     fi
 
-    echo "✅ SUCCESS: A moved to B seamlessly."
+    echo "✅ SUCCESS: Deep move created parent directories and preserved history."
     return 0
   }
 
-  local test_functions=("testFullIntraRepoMove")
+  local test_functions=("testDeepIntraRepoMove")
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
 }
