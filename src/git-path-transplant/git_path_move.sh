@@ -10,75 +10,54 @@ git_path_move() {
     return 1
   fi
 
-  # Resolve absolute paths for comparison
+  # Resolve absolute paths
   local abs_from_path
   abs_from_path=$(cd "$(dirname "$from_path")" 2>/dev/null && pwd)/$(basename "$from_path")
   
-  # 1. Extract the path history
-  [[ -n "$debug" ]] && echo "DEBUG: Extracting history from: $abs_from_path" >&2
+  # 1. Extract
   local meta_file
   meta_file=$(extract_git_path "$from_path")
+  if [[ $? -ne 0 || ! -f "$meta_file" ]]; then return 1; fi
+
+  # 2. Identify Context
+  local source_repo_root
+  source_repo_root=$(jq -r '.original_repo_root' "$meta_file")
   
-  if [[ $? -ne 0 || ! -f "$meta_file" ]]; then
-    echo "ERROR: Failed to extract history for $from_path" >&2
-    return 1
-  fi
-
-  # 2. Identify destination repo context
+  # Determine destination repo root
   local abs_to_path
-  if [[ "$to_path" = /* ]]; then
-    abs_to_path="$to_path"
-  else
-    abs_to_path="$(pwd)/$to_path"
-  fi
-
+  [[ "$to_path" = /* ]] && abs_to_path="$to_path" || abs_to_path="$(pwd)/$to_path"
+  
   local search_dir=$(dirname "$abs_to_path")
   local dest_repo_root=""
   while [[ "$search_dir" != "/" ]]; do
-    if [[ -d "$search_dir/.git" ]]; then
-      dest_repo_root="$search_dir"
-      break
-    fi
+    [[ -d "$search_dir/.git" ]] && dest_repo_root="$search_dir" && break
     search_dir="$(dirname "$search_dir")"
   done
 
-  if [[ -z "$dest_repo_root" ]]; then
-    echo "ERROR: Destination path is not inside a git repository: $to_path" >&2
-    return 1
-  fi
+  # 3. Transplant (Creates the 'history/...' branch)
+  local rel_dest_path="${abs_to_path#$dest_repo_root/}"
+  ( cd "$dest_repo_root" && git_path_transplant "$meta_file" "$rel_dest_path" )
 
-  # Calculate relative path for the transplant
-  local rel_dest_path
-  if [[ "$abs_to_path" == "$dest_repo_root" ]]; then
-    rel_dest_path="."
-  else
-    rel_dest_path="${abs_to_path#$dest_repo_root/}"
-  fi
-
-  # 3. Detect Intra-repo move and handle source deletion
-  local source_repo_root
-  source_repo_root=$(jq -r '.original_repo_root' "$meta_file")
-
-  # 4. Transplant the history
-  [[ -n "$debug" ]] && echo "DEBUG: Transplanting to: $rel_dest_path in $dest_repo_root" >&2
-  (
-    cd "$dest_repo_root" || exit 1
-    git_path_transplant "$meta_file" "$rel_dest_path"
-  )
-
-  # 5. Same-repo cleanup: Delete source directory if roots match
+  # 4. Intra-repo specific: Make the move "Real"
   if [[ "$source_repo_root" == "$dest_repo_root" ]]; then
-    [[ -n "$debug" ]] && echo "DEBUG: Same-repo move detected. Removing source: $abs_from_path" >&2
-    if [[ -e "$abs_from_path" ]]; then
-      rm -rf "$abs_from_path"
-      echo "🗑️  Deleted source directory (same-repo move): $from_path"
+    echo "🔄 Completing intra-repo move..."
+    
+    # Remove old directory
+    rm -rf "$abs_from_path"
+    
+    # Merge the new history so the folder 'b' actually appears
+    local branch_name="history/$rel_dest_path"
+    if git merge "$branch_name" --allow-unrelated-histories --no-edit; then
+      echo "✨ Moved $from_path to $to_path (History preserved)"
+    else
+      echo "⚠️  Merge conflict occurred. Please resolve and commit."
     fi
+  else
+    echo "📦 Inter-repo transplant complete. History available on branch: history/$rel_dest_path"
+    echo "💡 To finalize, run: git merge history/$rel_dest_path --allow-unrelated-histories"
   fi
 
-  # 6. Final Cleanup of temp files
-  local temp_dir=$(dirname "$meta_file")
-  rm -rf "$temp_dir"
-
-  echo "✅ Done. Use 'git status' to review and 'git merge history/$rel_dest_path --allow-unrelated-histories' to integrate."
+  # 5. Cleanup temp files
+  rm -rf "$(dirname "$meta_file")"
   return 0
 }
