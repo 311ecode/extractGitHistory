@@ -3,7 +3,7 @@
 git_path_move() {
   local from_path="$1"
   local to_path="$2"
-  local debug="${DEBUG:-}"
+  local act_like_cp="${ACT_LIKE_CP:-0}"
 
   if [[ $# -ne 2 ]]; then
     echo "ERROR: Usage: git_path_move <from_path> <to_path>" >&2
@@ -59,36 +59,36 @@ git_path_move() {
     dest_search_dir="$(dirname "$dest_search_dir")"
   done
 
-  # Calculate relative path within the destination repo
   local rel_dest_path="${abs_to_path#$dest_repo_root/}"
   rel_dest_path="${rel_dest_path#/}"
 
   # 4. Transplant
   ( cd "$dest_repo_root" && git_path_transplant "$meta_file" "$rel_dest_path" )
 
-  # 5. Handle Intra-repo vs Inter-repo logic
+  # 5. Handle Logic
   if [[ "$source_repo_root" == "$dest_repo_root" ]]; then
-    echo "🔄 Completing intra-repo move..."
-    
-    # CRITICAL FIX: Move to repo root before deleting the directory we might be standing in
     cd "$dest_repo_root" || return 1
     
-    # Remove old path
-    rm -rf "$abs_from_path"
+    # NEW: Only remove if not acting like CP
+    if [[ "$act_like_cp" == "1" ]]; then
+      echo "📂 Copying history to $to_path (Source preserved)..."
+    else
+      echo "🔄 Moving history to $to_path (Source removed)..."
+      rm -rf "$abs_from_path"
+    fi
     
-    # Merge the new history
     local branch_name="history/$rel_dest_path"
     if git merge "$branch_name" --allow-unrelated-histories --no-edit; then
-      echo "✨ Moved $from_path to $to_path (History preserved)"
+      local action="Moved"
+      [[ "$act_like_cp" == "1" ]] && action="Copied"
+      echo "✨ $action $from_path to $to_path (History preserved)"
     else
       echo "⚠️  Merge conflict occurred. Please resolve and commit."
     fi
   else
     echo "📦 Inter-repo transplant complete. History available on branch: history/$rel_dest_path"
-    echo "💡 To finalize, run: git merge history/$rel_dest_path --allow-unrelated-histories"
   fi
 
-  # Cleanup temp files
   rm -rf "$(dirname "$meta_file")"
   return 0
 }
