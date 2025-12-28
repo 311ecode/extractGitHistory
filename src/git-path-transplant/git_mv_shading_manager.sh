@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 
-# --- MV Shading ---
 register_git_mv_shade() {
   alias mv='git_mv_shaded'
   echo "✅ 'mv' is now shaded (history-aware)."
@@ -11,7 +10,6 @@ deregister_git_mv_shade() {
   echo "🚫 'mv' shading removed."
 }
 
-# --- CP Shading ---
 register_git_cp_shade() {
   alias cp='git_cp_shaded'
   echo "✅ 'cp' is now shaded (history-aware)."
@@ -22,7 +20,6 @@ deregister_git_cp_shade() {
   echo "🚫 'cp' shading removed."
 }
 
-# --- Bulk Management ---
 register_all_git_shades() {
   register_git_mv_shade
   register_git_cp_shade

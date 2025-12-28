@@ -12,6 +12,8 @@ testAllGitPathMove() {
     "testRelativeUpwardMove"
     "testShadingBypass"
     "testRegistrationLifecycle"
+    "testHistoryCopy"
+    "testRecursiveHistoryCopy"
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
