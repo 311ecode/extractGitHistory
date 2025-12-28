@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-
-testGitPathTransplant() {
-  export LC_NUMERIC=C
-  local debug="${DEBUG:-}"
-
-  testHashParityRoundTrip() {
+testHashParityRoundTrip() {
     echo "🧪 Testing Hash Parity (Deterministic ID Check)"
     local tmp_dir=$(mktemp -d)
     
@@ -90,12 +85,3 @@ testGitPathTransplant() {
       return 1
     fi
   }
-
-  local test_functions=("testHashParityRoundTrip")
-  local ignored_tests=()
-  bashTestRunner test_functions ignored_tests
-}
-
-if [[ "${BASH_SOURCE[0]}" == "${0}" ]]; then
-  testGitPathTransplant
-fi
