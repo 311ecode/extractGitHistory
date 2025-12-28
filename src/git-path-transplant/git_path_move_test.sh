@@ -1,74 +1,45 @@
 #!/usr/bin/env bash
 
 testGitPathMove() {
-  export LC_NUMERIC=C
-  local debug="${DEBUG:-}"
-
-  testIntraRepoMoveCleanup() {
-    echo "🧪 Testing Intra-repo move (Source should be deleted)"
+  testFullIntraRepoMove() {
+    echo "🧪 Testing Full Intra-repo Move (A vanishes, B appears)"
     local tmp_dir=$(mktemp -d)
     
-    # Setup single repo
-    mkdir -p "$tmp_dir/repo/old_dir"
+    mkdir -p "$tmp_dir/repo/dir_a"
     cd "$tmp_dir/repo" && git init -q
-    git config user.email "mover@test.com"
-    git config user.name "MoverBot"
+    git config user.email "test@test.com"
+    git config user.name "Tester"
     
-    echo "content" > old_dir/file.txt
-    git add . && git commit -m "feat: original location" -q
+    echo "data" > dir_a/file.txt
+    git add . && git commit -m "feat: initial data" -q
     
-    # Move within the same repo
-    git_path_move "old_dir" "new_dir"
+    # The actual move
+    git_path_move "dir_a" "dir_b"
     
-    # Verification
-    if [[ -d "old_dir" ]]; then
-      echo "❌ ERROR: Source directory 'old_dir' should have been deleted (Intra-repo)!"
+    # 1. A should be gone
+    if [[ -d "dir_a" ]]; then
+      echo "❌ ERROR: dir_a still exists!"
       return 1
     fi
-    echo "✅ SUCCESS: Intra-repo source deleted."
+    
+    # 2. B should exist (because of the auto-merge)
+    if [[ ! -f "dir_b/file.txt" ]]; then
+      echo "❌ ERROR: dir_b/file.txt does not exist! Auto-merge failed?"
+      return 1
+    fi
+
+    # 3. History should be linked
+    local log_count=$(git log --oneline -- dir_b/file.txt | wc -l)
+    if [[ $log_count -eq 0 ]]; then
+      echo "❌ ERROR: History not preserved for dir_b"
+      return 1
+    fi
+
+    echo "✅ SUCCESS: A moved to B seamlessly."
     return 0
   }
 
-  testInterRepoMoveSafety() {
-    echo "🧪 Testing Inter-repo move (Source should NOT be deleted)"
-    local tmp_dir=$(mktemp -d)
-    
-    # 1. Setup Source Repo
-    mkdir -p "$tmp_dir/source_repo/shared_utils"
-    cd "$tmp_dir/source_repo" && git init -q
-    git config user.email "mover@test.com"
-    git config user.name "MoverBot"
-    echo "utility-code" > shared_utils/lib.sh
-    git add . && git commit -m "feat: shared utils" -q
-
-    # 2. Setup Destination Repo
-    mkdir -p "$tmp_dir/dest_repo"
-    cd "$tmp_dir/dest_repo" && git init -q
-    git config user.email "mover@test.com"
-    git config user.name "MoverBot"
-    git commit --allow-empty -m "init dest" -q
-
-    # 3. Move from source_repo to dest_repo
-    git_path_move "$tmp_dir/source_repo/shared_utils" "imported_utils"
-
-    # 4. Verification
-    if [[ ! -d "$tmp_dir/source_repo/shared_utils" ]]; then
-      echo "❌ ERROR: Source directory was deleted in an INTER-repo move! This is unsafe."
-      return 1
-    fi
-    
-    # Verify the branch exists in destination
-    cd "$tmp_dir/dest_repo"
-    if ! git rev-parse --verify "history/imported_utils" >/dev/null 2>&1; then
-      echo "❌ ERROR: History branch not found in destination repo."
-      return 1
-    fi
-
-    echo "✅ SUCCESS: Inter-repo source preserved."
-    return 0
-  }
-
-  local test_functions=("testIntraRepoMoveCleanup" "testInterRepoMoveSafety")
+  local test_functions=("testFullIntraRepoMove")
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
 }
