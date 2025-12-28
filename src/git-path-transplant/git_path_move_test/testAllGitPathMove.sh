@@ -14,6 +14,7 @@ testAllGitPathMove() {
     "testRegistrationLifecycle"
     "testHistoryCopy"
     "testRecursiveHistoryCopy"
+    "testHistoryParityMagic"
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests

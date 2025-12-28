@@ -1,115 +1,135 @@
-# Git Path Transplanter & Shaded Move 🩺
+# Git Path Transplanter – History-Preserving Move & Copy
 
-The Git Path Transplanter suite enables the movement or copying of files and directories while **fully preserving their Git history**. Unlike a standard `mv` or `cp`, which often breaks history or requires complex `subtree` commands, this tool rewrites history into a "monorepo-ready" format and integrates it seamlessly.
+This toolset enables moving or copying directories (or files) inside a Git repository while **preserving the full history** of the affected paths in a semantically correct way.
 
----
+Unlike classical `git mv` (which only renames files in the index) or plain filesystem `mv`/`cp` (which breaks history), this solution:
 
-## 1. How it Works: The History Transformation
+- extracts the history of the selected path(s)
+- rewrites the paths inside the commit objects
+- grafts the rewritten history back into the main repository
 
-When you move or copy a path using this suite, the Git history is rewritten using a `filter-repo` strategy. This ensures that when you run `git log` on the new path, you see the entire timeline as if the files had always lived there.
+## Core Concepts & Behaviors
 
+### 1. Move operation (history rewrite + source removal)
 
+**Behavior**:  
+The entire history of the source path is relocated to the destination path.  
+The source path ceases to exist in the repository after the operation.
 
-### The History Branching Logic
-When `ACT_LIKE_CP=1` is triggered, the history effectively "forks." The original directory stays at its current commit, while the new directory receives a parallel set of commits that mirror the ancestral history but point to the new location.
+**Before**  
+```
+/src/featureX/
+  commit A ──► commit B ──► commit C    (history of featureX)
+```
 
+**After**  
+```
+/internal/modules/feature-new/
+  commit A' ──► commit B' ──► commit C'   (same metadata, different tree)
+```
 
+- Original commits A/B/C are no longer reachable through the current branch
+- New commits A'/B'/C' have **identical** author, committer, dates and messages
+- Tree objects are different → commit hashes are necessarily different
 
----
+### 2. Copy operation (history forking)
 
-## 2. Command Shading (The "mv" and "cp" Wrapper)
+**Behavior**:  
+The history of the source path remains unchanged.  
+A **parallel** history chain is created for the destination path.
 
-By using the **Shading Manager**, you can replace standard `mv` and `cp` commands with history-aware versions. 
+**Before**  
+```
+/src/featureX/
+  commit A ──► commit B ──► commit C
+```
 
-### Registration Functions
-The suite provides 6 functions for granular environment control:
+**After**  
+```
+/src/featureX/
+  commit A ──► commit B ──► commit C
 
-* **`register_git_mv_shade`**: Redirects `mv` to `git_mv_shaded`.
-* **`deregister_git_mv_shade`**: Restores standard `mv`.
-* **`register_git_cp_shade`**: Redirects `cp` to `git_cp_shaded`.
-* **`deregister_git_cp_shade`**: Restores standard `cp`.
-* **`register_all_git_shades`**: Enables both enhancements.
-* **`deregister_all_git_shades`**: Cleans the environment.
+/internal/modules/feature-legacy/
+  commit A' ──► commit B' ──► commit C'     ← exact metadata copy
+```
 
-### Shading Decision Logic
-The shaded commands only trigger history preservation if:
-1.  Exactly **two arguments** are provided (`source` and `destination`).
-2.  **No flags** (like `-v`, `-f`, or `-r`) are used.
-3.  The operation is occurring **inside a Git repository**.
+### 3. Command shading logic – When is history preserved?
 
+| Command                  | Arguments count | Flags present? | Inside git repo? | Result                              |
+|--------------------------|-----------------|----------------|------------------|-------------------------------------|
+| `mv src dst`             | exactly 2       | no             | yes              | **History move** (source removed)   |
+| `cp src dst`             | exactly 2       | no             | yes              | **History copy** (fork)             |
+| `cp -r src dst`          | exactly 2       | only -r        | yes              | **History recursive copy** (fork)   |
+| any other combination    | any             | any            | any              | Standard shell command (bypass)     |
 
+## Shading Control Functions
 
----
-
-## 3. Usage Examples
-
-### History-Aware Move (Intra-repo)
 ```bash
-# Register shades in your session
+# Enable/disable individual commands
+register_git_mv_shade
+deregister_git_mv_shade
+
+register_git_cp_shade
+deregister_git_cp_shade
+
+# Enable/disable both at once (most common usage)
 register_all_git_shades
-
-# Move a folder; history is automatically extracted, re-prefixed, and merged
-mv src/old_feature internal/modules/new_feature
-
+deregister_all_git_shades
 ```
 
-### History-Aware Copy (Forking History)
+## High-Level Workflow (Implementation)
 
-```bash
-# This creates a new folder 'legacy_v1' with the full history of 'current_api'
-# 'current_api' remains untouched.
-cp current_api legacy_v1
+1. **Isolation**  
+   Extract all commits that touch the source path into a temporary, flat (root-level) repository.
 
-```
+2. **Path rewriting**  
+   Use `git filter-repo --to-subdirectory-filter <destination>`  
+   → moves all files into the target directory prefix
 
-### Inter-Repo Transplant
+3. **Object transfer**  
+   Fetch rewritten objects into the original repository
 
-```bash
-# 1. In Source Repo
-extract_git_path ./tools/validator
+4. **Integration**  
+   - Create an orphan branch `history/<destination-path-slug>`  
+   - Merge it into current branch with `--allow-unrelated-histories`
 
-# 2. In Destination Monorepo
-git_path_transplant /tmp/meta_123.json packages/validator-tool
+## Important Technical Notes
 
-```
+- **Commit hashes always change**  
+  Because file paths are part of the tree object, and tree is part of the commit object.
 
----
+- **Metadata preservation**  
+  Author name/email, committer name/email, author date, commit date, and commit message are copied verbatim.
 
-## 4. Technical Details
+- **Merge nature of operation**  
+  Both move and copy end with a merge commit (usually an octopus or simple two-parent merge).
 
-### Branch Strategy
+- **Conflict handling**  
+  If destination path already contains files, a regular merge conflict occurs and must be resolved manually.
 
-The tool creates branches following the pattern: `history/<destination_path>`.
+## Limitations & Known Issues
 
-* These are **orphan branches** containing the re-prefixed history.
-* Original commit timestamps, authors, and messages are preserved.
-* **SHA-1 Hashes** change because the file paths inside the commit objects are modified to match the new destination.
+- Does **not** handle submodules correctly (submodule pointers usually break)
+- Large directories with thousands of commits can be slow (but still much faster than `filter-branch`)
+- Binary files are preserved correctly, but delta compression may suffer after rewrite
 
-### Path Transformation
+## Dependencies
 
-Standard extraction creates a root-level history. The transplanter "shifts" this history:
+- `git` ≥ 2.25 (recommended ≥ 2.35)
+- `git-filter-repo` (Python version ≥ 0.30, commit a40bce5 or newer recommended)
+- `jq` (for metadata/branch name parsing)
+- standard shell utilities (`mktemp`, `sed`, `grep`, etc.)
 
-* **Original State:** `Commit A: modified file.js`
-* **Transplanted State:** `Commit A: modified packages/new-feature/file.js`
+## Related Testing Evidence
 
----
+The following behaviors are explicitly verified by automated tests:
 
-## 5. Troubleshooting & FAQ
+- Full intra-repository move (source disappears, destination appears with history)
+- Inter-repository transplant safety (source repository is never modified)
+- Deep/nested path creation (`a/b/c` → `x/y/z/deep/feature`)
+- Copy with multiple commits + file modifications
+- Metadata parity (author, date, message) between original and transplanted chain
+- Relative path handling (`../..`, `.`, etc.)
+- Bypass when flags are used (`-f`, `-v`, `--backup`, etc.)
+- Recursive copy (`cp -r`) forks history correctly
 
-**Why did my hashes change?**
-Git hashes are a checksum of the content *and* the file paths. Since the tool moves files to a new subdirectory within the history, the hashes must be recalculated.
-
-**Can I undo a move?**
-Since the tool creates a merge commit, you can undo the operation by resetting your branch:
-`git reset --hard HEAD~1`
-
-**Does this work with large repos?**
-Yes. Because it uses `git-filter-repo`, it is significantly faster and more memory-efficient than `git filter-branch` or standard `subtree` merges.
-
----
-
-**Dependencies:**
-
-* `git`
-* `git-filter-repo` (Python version a40bce548d2c surely works)
-* `jq` (for metadata parsing)
