@@ -1,39 +1,70 @@
 #!/usr/bin/env bash
 
 testRegistrationLifecycle() {
-  echo "🧪 Testing Granular Registration Lifecycle"
+  echo "🧪 Testing Granular Registration Lifecycle (State Protected)"
   
-  # Save original states
-  local orig_mv="" && [[ "$(type -t mv)" == "alias" ]] && orig_mv=$(alias mv)
-  local orig_cp="" && [[ "$(type -t cp)" == "alias" ]] && orig_cp=$(alias cp)
+  # 1. PROTECT ENVIRONMENT
+  # We push the current state of mv and cp aliases if they exist
+  push_state alias_mv "$(alias mv 2>/dev/null | sed "s/alias mv='\(.*\)'/\1/")"
+  push_state alias_cp "$(alias cp 2>/dev/null | sed "s/alias cp='\(.*\)'/\1/")"
 
-  # Clean slate
+  # Ensure a clean slate for the test
   unalias mv cp 2>/dev/null
 
-  # 1. Test Independent MV
+  local result=0
+
+  # 2. Test Independent MV
   register_git_mv_shade
-  [[ "$(type -t mv)" != "alias" ]] || echo "✅ MV registered"
-  [[ "$(type -t cp)" == "alias" ]] && echo "❌ CP accidentally registered" && return 1
+  if [[ "$(type -t mv)" != "alias" ]]; then
+    echo "❌ ERROR: MV failed to register."
+    result=1
+  else
+    echo "✅ MV registered"
+  fi
 
-  # 2. Test Independent CP
+  if [[ "$(type -t cp)" == "alias" ]]; then
+    echo "❌ ERROR: CP accidentally registered during MV registration."
+    result=1
+  fi
+
+  # 3. Test Independent CP
   register_git_cp_shade
-  [[ "$(type -t cp)" != "alias" ]] || echo "✅ CP registered"
+  if [[ "$(type -t cp)" != "alias" ]]; then
+    echo "❌ ERROR: CP failed to register."
+    result=1
+  else
+    echo "✅ CP registered"
+  fi
 
-  # 3. Test Bulk Deregister
+  # 4. Test Bulk Deregister
   deregister_all_git_shades
-  [[ "$(type -t mv)" == "alias" || "$(type -t cp)" == "alias" ]] && echo "❌ Bulk deregister failed" && return 1
-  echo "✅ Bulk deregistration successful"
+  if [[ "$(type -t mv)" == "alias" || "$(type -t cp)" == "alias" ]]; then
+    echo "❌ ERROR: Bulk deregister failed to remove aliases."
+    result=1
+  else
+    echo "✅ Bulk deregistration successful"
+  fi
 
-  # 4. Test Bulk Register
+  # 5. Test Bulk Register
   register_all_git_shades
-  [[ "$(type -t mv)" == "alias" && "$(alias mv)" == *"git_mv_shaded"* ]] || return 1
-  [[ "$(type -t cp)" == "alias" && "$(alias cp)" == *"git_cp_shaded"* ]] || return 1
-  echo "✅ Bulk registration successful"
+  if [[ "$(type -t mv)" == "alias" && "$(alias mv)" == *"git_mv_shaded"* ]] && \
+     [[ "$(type -t cp)" == "alias" && "$(alias cp)" == *"git_cp_shaded"* ]]; then
+    echo "✅ Bulk registration successful"
+  else
+    echo "❌ ERROR: Bulk registration failed."
+    result=1
+  fi
 
-  # Cleanup and Restore
+  # 6. RESTORE ENVIRONMENT
   deregister_all_git_shades
-  [[ -n "$orig_mv" ]] && eval "$orig_mv"
-  [[ -n "$orig_cp" ]] && eval "$orig_cp"
+  
+  # Retrieve saved values from stack
+  local saved_cp=$(pop_state alias_cp)
+  local saved_mv=$(pop_state alias_mv)
 
-  return 0
+  # Restore original aliases if they existed
+  [[ -n "$saved_mv" ]] && alias mv="$saved_mv"
+  [[ -n "$saved_cp" ]] && alias cp="$saved_cp"
+
+  return $result
 }
