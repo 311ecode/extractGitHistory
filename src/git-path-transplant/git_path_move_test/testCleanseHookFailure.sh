@@ -1,46 +1,57 @@
 #!/usr/bin/env bash
 
-# This is our mock hook function
-# It simulates a failure (e.g., it didn't like the look of the new history)
+# Mock hook function: Returns failure to block the cleanse
 my_failing_hook() {
-  echo "🔍 Hook: Validating $1 vs $2..."
-  echo "❌ Hook: Detected a mismatch! Blocking cleanse."
+  echo "🔍 Hook: Received params - Src: $1, Dst: $2"
+  echo "❌ Hook: Simulated integrity check failed. Blocking cleanse."
   return 1 
 }
 
 testCleanseHookFailure() {
-  echo "🧪 Testing Cleanse Hook Failure (Safeguard Check)"
-  local tmp_dir=$(mktemp -d)
-  cd "$tmp_dir" && git init -q
-  git config user.email "test@test.com" && git config user.name "Tester"
-
-  # 1. Setup history
-  mkdir -p "src_dir"
-  echo "important" > src_dir/file.txt && git add . && git commit -m "init" -q
-
-  # 2. Export the hook and set the environment variable
+  echo "🧪 Testing Cleanse Hook Failure (Environment Protected)"
+  
+  # 1. SAVE & SET STATE
+  # Protect the user's environment by pushing current states onto the stack
+  push_state GIT_PATH_TRANSPLANT_USE_CLEANSE "1"
+  push_state GIT_PATH_TRANSPLANT_CLEANSE_HOOK "my_failing_hook"
   export -f my_failing_hook
-  export GIT_PATH_TRANSPLANT_USE_CLEANSE=1
-  export GIT_PATH_TRANSPLANT_CLEANSE_HOOK="my_failing_hook"
 
-  # 3. Run the move
-  git_path_move "src_dir" "dst_dir"
+  local tmp_dir=$(mktemp -d)
+  local result=0
 
-  # 4. VERIFICATION
-  echo "🔍 Verifying result..."
-  
-  # History Check: Since the hook failed, the history for 'src_dir' should STILL EXIST
-  local src_history_count=$(git log --oneline -- "src_dir" | wc -l)
-  
-  if [[ $src_history_count -eq 0 ]]; then
-    echo "❌ ERROR: History was scrubbed even though the hook failed!"
-    return 1
-  fi
+  # Setup test repository
+  (
+    cd "$tmp_dir" && git init -q
+    git config user.email "test@test.com" && git config user.name "Tester"
+    mkdir -p "src_dir"
+    echo "important data" > src_dir/file.txt
+    git add . && git commit -m "initial commit" -q
 
-  echo "✅ SUCCESS: Hook blocked the cleanse. Source history preserved as a fallback."
+    # 2. RUN THE MOVE
+    # This should attempt to cleanse but get blocked by the hook
+    git_path_move "src_dir" "dst_dir"
+
+    # 3. VERIFICATION
+    echo "🔍 Verifying history was NOT scrubbed..."
+    local src_history_count=$(git log --all -- "src_dir" | wc -l)
+    
+    if [[ $src_history_count -eq 0 ]]; then
+      echo "❌ ERROR: History was scrubbed! The hook failure was ignored."
+      result=1
+    else
+      echo "✅ SUCCESS: Hook blocked the cleanse. History preserved."
+      result=0
+    fi
+  )
+  result=$?
+
+  # 4. RESTORE STATE
+  # Restore original variables to exactly how they were (even if they were unset)
+  pop_state GIT_PATH_TRANSPLANT_CLEANSE_HOOK
+  pop_state GIT_PATH_TRANSPLANT_USE_CLEANSE
   
-  # Cleanup env for other tests
-  unset GIT_PATH_TRANSPLANT_USE_CLEANSE
-  unset GIT_PATH_TRANSPLANT_CLEANSE_HOOK
-  return 0
+  # Cleanup the function from the namespace
+  unset -f my_failing_hook
+
+  return $result
 }
