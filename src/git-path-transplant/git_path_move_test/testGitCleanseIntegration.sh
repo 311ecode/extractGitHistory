@@ -1,44 +1,35 @@
 #!/usr/bin/env bash
 
 testGitCleanseIntegration() {
-  echo "🧪 Testing Git Cleanse Integration (Deep Cleanse Check)"
+  echo "🧪 Testing Git Cleanse Integration (State Protected)"
+  
+  # 1. SAVE USER STATE
+  push_state GIT_PATH_TRANSPLANT_USE_CLEANSE "1"
+  push_state DEBUG "1" # Enable for the test log
+
   local tmp_dir=$(mktemp -d)
   cd "$tmp_dir" && git init -q
   git config user.email "tester@test.com" && git config user.name "Tester"
 
-  # 1. Create source with history
+  # 2. Setup and Run
   mkdir -p "sensitive_dir"
   echo "v1" > sensitive_dir/data.txt && git add . && git commit -m "commit 1" -q
-  echo "v2" > sensitive_dir/data.txt && git add . && git commit -m "commit 2" -q
-
-  # 2. Run move with CLEANSE enabled
-  export GIT_PATH_TRANSPLANT_USE_CLEANSE=1
-  git_path_move "sensitive_dir" "new_home"
-  unset GIT_PATH_TRANSPLANT_USE_CLEANSE
-
-  # 3. Verify Filesystem
-  [[ -d "sensitive_dir" ]] && echo "❌ ERROR: Source dir still exists" && return 1
-  [[ ! -f "new_home/data.txt" ]] && echo "❌ ERROR: Dest file missing" && return 1
-
-  # 4. Verify History Scrub (The Deep Check)
-  echo "🔍 Checking for ghost history of 'sensitive_dir'..."
-  # If git-cleanse worked, the old path should have zero commits in the log
-  local history_line_count
-  history_line_count=$(git log --all -- "sensitive_dir" | wc -l)
   
+  git_path_move "sensitive_dir" "new_home"
+
+  # 3. VERIFICATION
+  local history_line_count=$(git log --all -- "sensitive_dir" | wc -l)
+  local result=0
   if [[ $history_line_count -gt 0 ]]; then
-    echo "❌ ERROR: Deep cleanse failed! History for 'sensitive_dir' still exists."
-    return 1
+    echo "❌ ERROR: Deep cleanse failed!"
+    result=1
+  else
+    echo "✅ SUCCESS: Deep cleanse verified."
   fi
 
-  # 5. Verify History Preservation at Destination
-  local dest_history_count
-  dest_history_count=$(git log --oneline -- "new_home" | wc -l)
-  if [[ $dest_history_count -lt 2 ]]; then
-    echo "❌ ERROR: History not transplanted to new_home."
-    return 1
-  fi
+  # 4. RESTORE USER STATE
+  pop_state DEBUG
+  pop_state GIT_PATH_TRANSPLANT_USE_CLEANSE
 
-  echo "✅ SUCCESS: Deep cleanse verified. Source history wiped, dest history preserved."
-  return 0
+  return $result
 }

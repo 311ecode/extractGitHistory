@@ -5,7 +5,6 @@ git_path_move() {
   local to_path="$2"
   local act_like_cp="${GIT_PATH_TRANSPLANT_ACT_LIKE_CP:-0}"
   local use_cleanse="${GIT_PATH_TRANSPLANT_USE_CLEANSE:-0}"
-  # HOOK: Name of a bash function to call before cleansing history.
   local cleanse_hook="${GIT_PATH_TRANSPLANT_CLEANSE_HOOK:-}"
 
   if [[ $# -ne 2 ]]; then
@@ -29,7 +28,10 @@ git_path_move() {
   [[ ! -d "$search_dir" ]] && search_dir=$(dirname "$search_dir")
   local source_repo_root=""
   while [[ "$search_dir" != "/" ]]; do
-    [[ -d "$search_dir/.git" ]] && source_repo_root="$search_dir" && break
+    if [[ -d "$search_dir/.git" ]]; then
+      source_repo_root="$search_dir"
+      break
+    fi
     search_dir="$(dirname "$search_dir")"
   done
 
@@ -53,7 +55,6 @@ git_path_move() {
   rel_dest_path="${rel_dest_path#/}"
 
   # 4. Transplant with Hook Propagation
-  # Safety: If copying, we never cleanse.
   local effective_cleanse="$use_cleanse"
   [[ "$act_like_cp" == "1" ]] && effective_cleanse="0"
 
@@ -64,19 +65,12 @@ git_path_move() {
   ) || return 1
 
   # 5. Local Cleanup (Filesystem only)
-  if [[ "$source_repo_root" == "$dest_repo_root" ]]; then
+  if [[ "$source_repo_root" == "$dest_repo_root" && "$act_like_cp" != "1" ]]; then
     cd "$dest_repo_root" || return 1
-    if [[ "$act_like_cp" != "1" ]]; then
-       # If history wasn't scrubbed, we still need to remove the files from the tree
-       if [[ ! -e "$abs_from_path" ]]; then
-         echo "✨ Moved $from_path to $to_path (Source history scrubbed)"
-       else
-         echo "🔄 Moving $from_path to $to_path (Standard removal)..."
-         rm -rf "$abs_from_path"
-         git rm -rf "$abs_from_path" &>/dev/null || true
-       fi
-    else
-      echo "📂 Copied $from_path to $to_path (Source preserved)"
+    if [[ -e "$abs_from_path" ]]; then
+      # If history wasn't scrubbed by a hook failure, we still remove the file pointer
+      rm -rf "$abs_from_path"
+      git rm -rf "$abs_from_path" &>/dev/null || true
     fi
   fi
 

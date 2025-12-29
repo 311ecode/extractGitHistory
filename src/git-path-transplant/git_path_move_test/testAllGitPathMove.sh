@@ -19,6 +19,7 @@ testAllGitPathMove() {
     "testRebaseTransplant"
     "testGitCleanseIntegration"
     "testCleanseHookFailure"
+    "testCleanseHookParity"
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
