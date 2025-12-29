@@ -2,6 +2,26 @@
 
 git_path_transplant() {
   command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 2)"
+  local meta_file="$1"
+  local dest_path="$2"
+
+  # 1. Check if the working directory is dirty
+  if [[ -n $(git status --porcelain) ]]; then
+    echo "❌ ERROR: Working directory is dirty. Please commit or stash changes before transplanting." >&2
+    return 1
+  fi
+
+  # 2. Check if destination exists or is ignored
+  if [[ -e "$dest_path" ]]; then
+    echo "❌ ERROR: Destination path '$dest_path' already exists." >&2
+    return 1
+  fi
+
+  if git check-ignore -q "$dest_path"; then
+    echo "❌ ERROR: Destination path '$dest_path' is ignored by git." >&2
+    return 1
+  fi
+
   
   local meta_json="$1"
   local destination_path="$2"
