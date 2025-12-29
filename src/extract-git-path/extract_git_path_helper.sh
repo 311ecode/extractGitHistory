@@ -3,113 +3,131 @@ extract_git_path_helper() {
   local abs_path="$1"
   local repo_root="$2"
   local rel_path="$3"
-  local temp_base
-  local temp_dir
-  local repo_dir
 
-  # Get original commit hashes before extraction
+  local temp_base="${TMPDIR:-/tmp}/extract-git-path"
+  mkdir -p "$temp_base" || {
+    echo "ERROR: Cannot create temp base directory $temp_base" >&2
+    return 1
+  }
+
+  # Create a truly unique temporary directory
+  local temp_dir
+  temp_dir=$(mktemp -d "$temp_base/extract_XXXXXXXXXX") || {
+    echo "ERROR: Failed to create unique temporary directory" >&2
+    return 1
+  }
+
+  # Auto-cleanup on exit (very useful)
+  trap '[[ -d "$temp_dir" && -n "$temp_dir" ]] && rm -rf "$temp_dir" 2>/dev/null' EXIT
+
+  local repo_dir="$temp_dir/repo"
+
+  [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Creating temp dir: $temp_dir" >&2
+
+  # Collect original commit metadata
   [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Collecting original commit metadata..." >&2
-  
-  # Store git log output in variable to avoid process substitution issues
+
   local git_log_output
-  git_log_output=$(git log --reverse --pretty=format:'%H|%aI|%ae|%s' -- "$rel_path")
-  
+  git_log_output=$(git -C "$repo_root" log --reverse --pretty=format:'%H|%aI|%ae|%s' -- "$rel_path" 2>/dev/null)
+
+  if [[ -z "$git_log_output" ]]; then
+    echo "ERROR: No commit history found for path: $rel_path" >&2
+    return 1
+  fi
+
   if [[ -n "${DEBUG:-}" ]]; then
     echo "DEBUG: Raw git log output for path '$rel_path':" >&2
     echo "$git_log_output" >&2
   fi
-  
+
   declare -A original_commits
   while IFS='|' read -r hash date author message; do
-    [[ -z "$hash" ]] && continue  # Skip empty lines
+    [[ -z "$hash" ]] && continue
     original_commits["$hash"]="$date|$author|$message"
     [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Original commit: $hash | $date | $author | $message" >&2
   done <<< "$git_log_output"
 
   [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Found ${#original_commits[@]} original commits" >&2
 
-  # Create temp directory structure
-  temp_base="${TMPDIR:-/tmp}/extract-git-path"
-  mkdir -p "$temp_base"
-  temp_dir="$temp_base/extract_$(date +%s)_$$"
-  repo_dir="$temp_dir/repo"
-
-  [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Creating temp dir: $temp_dir" >&2
-
-  # Clone repository to repo subdirectory
+  # Clone the repository
   if ! git clone --no-hardlinks "$repo_root" "$repo_dir" >/dev/null 2>&1; then
-    echo "ERROR: Failed to clone repository" >&2
+    echo "ERROR: Failed to clone repository from $repo_root to $repo_dir" >&2
     return 1
   fi
 
-  # Extract and flatten history
-  cd "$repo_dir" || return 1
+  cd "$repo_dir" || { echo "ERROR: Cannot cd into $repo_dir" >&2; return 1; }
 
+  # Extract and flatten to root
   if [[ "$rel_path" != "." ]]; then
-    # Use git-filter-repo to extract path and flatten to root
-    [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Running git-filter-repo..." >&2
-    if ! git filter-repo --force --path "$rel_path" --path-rename "$rel_path/:" >/dev/null 2>&1; then
-      echo "ERROR: Failed to extract history for path: $rel_path" >&2
-      rm -rf "$temp_dir"
-      return 1
+    [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Running git-filter-repo for path: $rel_path" >&2
+
+    if [[ -f "$repo_root/$rel_path" ]]; then
+      # === FILE: Flatten to root using basename ===
+      local basename="${rel_path##*/}"
+      if ! git filter-repo --force \
+           --path "$rel_path" \
+           --path-rename "$rel_path:$basename" \
+           >/dev/null 2>&1; then
+        echo "ERROR: git filter-repo failed for file: $rel_path" >&2
+        return 1
+      fi
+    else
+      # === DIRECTORY: Move contents to root ===
+      if ! git filter-repo --force \
+           --path "$rel_path/" \
+           --path-rename "$rel_path/:" \
+           >/dev/null 2>&1; then
+        echo "ERROR: git filter-repo failed for directory: $rel_path" >&2
+        return 1
+      fi
     fi
   fi
 
-  # Verify extracted repo has commits
-  if ! git log --oneline | head -1 | grep -q .; then
-    echo "ERROR: No commits found after extraction (this should not happen)" >&2
-    rm -rf "$temp_dir"
+  # Verify extraction produced commits
+  if ! git log --oneline -n 1 >/dev/null 2>&1; then
+    echo "ERROR: No commits found after extraction" >&2
     return 1
   fi
 
-  # Build commit mapping (old hash -> new hash)
+  # Build commit mapping
   [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Building commit mappings..." >&2
-  
-  # Store extracted git log output in variable
+
   local extracted_log_output
   extracted_log_output=$(git log --reverse --pretty=format:'%H|%aI|%ae|%s')
-  
+
   if [[ -n "${DEBUG:-}" ]]; then
     echo "DEBUG: Extracted git log output:" >&2
     echo "$extracted_log_output" >&2
   fi
-  
+
   declare -A commit_mappings
-  
+
   while IFS='|' read -r new_hash date author message; do
-    [[ -z "$new_hash" ]] && continue  # Skip empty lines
+    [[ -z "$new_hash" ]] && continue
+
     [[ -n "${DEBUG:-}" ]] && echo "DEBUG: New commit: $new_hash | $date | $author | $message" >&2
-    
-    # Find matching original commit by date, author, and message
+
     local found=false
     for old_hash in "${!original_commits[@]}"; do
       IFS='|' read -r old_date old_author old_message <<< "${original_commits[$old_hash]}"
-      
+
       if [[ "$date" == "$old_date" && "$author" == "$old_author" && "$message" == "$old_message" ]]; then
         commit_mappings["$old_hash"]="$new_hash"
         [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Matched: $old_hash -> $new_hash" >&2
-        unset "original_commits[$old_hash]"  # Remove to avoid duplicate matches
+        unset "original_commits[$old_hash]"
         found=true
         break
       fi
     done
-    
+
     if [[ "$found" == false ]] && [[ -n "${DEBUG:-}" ]]; then
-      echo "DEBUG: WARNING - No match found for new commit $new_hash" >&2
+      echo "DEBUG: WARNING - No matching original commit found for: $new_hash" >&2
     fi
   done <<< "$extracted_log_output"
 
   [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Mapped ${#commit_mappings[@]} commits" >&2
-  
-  # Show unmapped original commits if any
-  if [[ -n "${DEBUG:-}" ]] && [[ ${#original_commits[@]} -gt 0 ]]; then
-    echo "DEBUG: WARNING - ${#original_commits[@]} original commits not mapped:" >&2
-    for old_hash in "${!original_commits[@]}"; do
-      echo "DEBUG:   Unmapped: $old_hash -> ${original_commits[$old_hash]}" >&2
-    done
-  fi
 
-  # Generate extract-git-path-meta.json
+  # Generate metadata JSON
   local meta_file="$temp_dir/extract-git-path-meta.json"
   local extraction_timestamp=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
@@ -123,7 +141,6 @@ extract_git_path_helper() {
   "commit_mappings": {
 EOF
 
-  # Write commit mappings
   local first=true
   for old_hash in "${!commit_mappings[@]}"; do
     if [[ "$first" == true ]]; then
@@ -135,7 +152,6 @@ EOF
   done
 
   cat >> "$meta_file" <<EOF
-
   },
   "sync_status": {
     "synced": false,
@@ -150,10 +166,9 @@ EOF
 
   [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Generated metadata at: $meta_file" >&2
 
-  # Output repo path to stderr for development convenience
+  # Output results
   echo "$repo_dir" >&2
-
-  # Output extract-git-path-meta.json path to stdout
   echo "$meta_file"
+
   return 0
 }
