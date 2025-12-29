@@ -20,7 +20,7 @@ git_cp_shaded() {
   if [[ ${#paths[@]} -eq 2 && $has_unsupported_flags -eq 0 ]]; then
     if git rev-parse --is-inside-work-tree &>/dev/null; then
       # Even if -r wasn't passed, we treat directory copies as history-forks
-      ACT_LIKE_CP=1 git_path_move "${paths[0]}" "${paths[1]}"
+      GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1 git_path_move "${paths[0]}" "${paths[1]}"
       return $?
     fi
   fi

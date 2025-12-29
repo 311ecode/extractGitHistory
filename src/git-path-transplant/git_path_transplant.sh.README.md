@@ -77,6 +77,13 @@ register_all_git_shades
 deregister_all_git_shades
 ```
 
+## Environment Variables
+
+The following environment variables influence the behavior of path movements and history preservation during the transplant and shading process:
+
+* **`GIT_PATH_TRANSPLANT_ACT_LIKE_CP`**: When set to `1`, the system performs a history-aware copy. The source path remains intact, and a new branch is created to track the history for the destination path.
+* **`DEBUG`**: When set to any non-empty value, the script provides verbose output, including hash comparisons and internal directory states, to assist in troubleshooting.
+
 ## High-Level Workflow (Implementation)
 
 1. **Isolation**  
