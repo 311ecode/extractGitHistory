@@ -4,6 +4,7 @@ git_path_move() {
   local from_path="$1"
   local to_path="$2"
   local act_like_cp="${GIT_PATH_TRANSPLANT_ACT_LIKE_CP:-0}"
+  local use_cleanse="${GIT_PATH_TRANSPLANT_USE_CLEANSE:-0}"
 
   if [[ $# -ne 2 ]]; then
     echo "ERROR: Usage: git_path_move <from_path> <to_path>" >&2
@@ -62,31 +63,33 @@ git_path_move() {
   local rel_dest_path="${abs_to_path#$dest_repo_root/}"
   rel_dest_path="${rel_dest_path#/}"
 
-  # 4. Transplant
-  ( cd "$dest_repo_root" && git_path_transplant "$meta_file" "$rel_dest_path" )
+  # 4. Transplant with Env Var Propagation
+  # Safety: Never cleanse if we are just copying
+  local effective_cleanse="$use_cleanse"
+  [[ "$act_like_cp" == "1" ]] && effective_cleanse="0"
 
-  # 5. Handle Logic
+  ( 
+    export GIT_PATH_TRANSPLANT_USE_CLEANSE="$effective_cleanse"
+    cd "$dest_repo_root" && git_path_transplant "$meta_file" "$rel_dest_path" 
+  ) || return 1
+
+  # 5. Handle Final Cleanup Logic
   if [[ "$source_repo_root" == "$dest_repo_root" ]]; then
     cd "$dest_repo_root" || return 1
     
-    # NEW: Only remove if not acting like CP
-    if [[ "$act_like_cp" == "1" ]]; then
-      echo "📂 Copying history to $to_path (Source preserved)..."
+    if [[ "$act_like_cp" != "1" ]]; then
+      if [[ "$effective_cleanse" == "1" ]]; then
+        # The history was scrubbed inside git_path_transplant
+        echo "✨ Moved $from_path to $to_path (History scrubbed from source)"
+      else
+        echo "🔄 Moving history to $to_path (Standard removal)..."
+        rm -rf "$abs_from_path"
+        git rm -rf "$abs_from_path" &>/dev/null || true
+        echo "✨ Moved $from_path to $to_path (History preserved)"
+      fi
     else
-      echo "🔄 Moving history to $to_path (Source removed)..."
-      rm -rf "$abs_from_path"
+      echo "📂 Copied $from_path to $to_path (Source preserved)"
     fi
-    
-    local branch_name="history/$rel_dest_path"
-    if git merge "$branch_name" --allow-unrelated-histories --no-edit; then
-      local action="Moved"
-      [[ "$act_like_cp" == "1" ]] && action="Copied"
-      echo "✨ $action $from_path to $to_path (History preserved)"
-    else
-      echo "⚠️  Merge conflict occurred. Please resolve and commit."
-    fi
-  else
-    echo "📦 Inter-repo transplant complete. History available on branch: history/$rel_dest_path"
   fi
 
   rm -rf "$(dirname "$meta_file")"
