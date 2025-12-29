@@ -1,142 +1,89 @@
-# Git Path Transplanter – History-Preserving Move & Copy
+# git-path-transplant – History-Preserving Path Transplant & Move
 
-This toolset enables moving or copying directories (or files) inside a Git repository while **preserving the full history** of the affected paths in a semantically correct way.
+**Move or copy files/directories inside a git repository (or between repositories) while preserving full history.**
 
-Unlike classical `git mv` (which only renames files in the index) or plain filesystem `mv`/`cp` (which breaks history), this solution:
+Two main commands:
 
-- extracts the history of the selected path(s)
-- rewrites the paths inside the commit objects
-- grafts the rewritten history back into the main repository
+- `git_path_move`       → move (source disappears, like `git mv` with history)
+- `git_path_transplant` → copy/transplant history into new location (source preserved)
 
-## Core Concepts & Behaviors
+## Main Features
 
-### 1. Move operation (history rewrite + source removal)
+- Preserves full commit history of moved/copied path
+- Works with deep/nested paths (automatically creates parent directories)
+- Supports intra-repo moves, inter-repo transplants
+- Optional **copy-like** behavior (`cp -r` semantics)
+- Optional **rebase** instead of merge when transplanting
+- Shaded aliases: `mv` / `cp` can be overridden to use git-aware versions
 
-**Behavior**:  
-The entire history of the source path is relocated to the destination path.  
-The source path ceases to exist in the repository after the operation.
-
-**Before**  
-```
-/src/featureX/
-  commit A ──► commit B ──► commit C    (history of featureX)
-```
-
-**After**  
-```
-/internal/modules/feature-new/
-  commit A' ──► commit B' ──► commit C'   (same metadata, different tree)
-```
-
-- Original commits A/B/C are no longer reachable through the current branch
-- New commits A'/B'/C' have **identical** author, committer, dates and messages
-- Tree objects are different → commit hashes are necessarily different
-
-### 2. Copy operation (history forking)
-
-**Behavior**:  
-The history of the source path remains unchanged.  
-A **parallel** history chain is created for the destination path.
-
-**Before**  
-```
-/src/featureX/
-  commit A ──► commit B ──► commit C
-```
-
-**After**  
-```
-/src/featureX/
-  commit A ──► commit B ──► commit C
-
-/internal/modules/feature-legacy/
-  commit A' ──► commit B' ──► commit C'     ← exact metadata copy
-```
-
-### 3. Command shading logic – When is history preserved?
-
-| Command                  | Arguments count | Flags present? | Inside git repo? | Result                              |
-|--------------------------|-----------------|----------------|------------------|-------------------------------------|
-| `mv src dst`             | exactly 2       | no             | yes              | **History move** (source removed)   |
-| `cp src dst`             | exactly 2       | no             | yes              | **History copy** (fork)             |
-| `cp -r src dst`          | exactly 2       | only -r        | yes              | **History recursive copy** (fork)   |
-| any other combination    | any             | any            | any              | Standard shell command (bypass)     |
-
-## Shading Control Functions
+## Basic Usage
 
 ```bash
-# Enable/disable individual commands
-register_git_mv_shade
-deregister_git_mv_shade
+# Simple intra-repo move (like git mv but with history)
+git_path_move old/path new/location
 
-register_git_cp_shade
-deregister_git_cp_shade
+# Transplant (copy with history) from another repo using metadata
+git_path_transplant /path/to/meta.json new/destination
 
-# Enable/disable both at once (most common usage)
-register_all_git_shades
-deregister_all_git_shades
+# Copy instead of move (source preserved)
+GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1 git_path_move dir_a backup/dir_a
 ```
 
-## Environment Variables
+## All Supported Environment Variables
 
-The following environment variables influence the behavior of path movements and history preservation during the transplant and shading process:
+| Variable                                      | Default       | Meaning / Effect                                                                                  | Typical values / examples                   |
+|-----------------------------------------------|---------------|---------------------------------------------------------------------------------------------------|---------------------------------------------|
+| `GIT_PATH_TRANSPLANT_ACT_LIKE_CP`             | unset         | When set (any value), `git_path_move` behaves like copy instead of move (source is preserved)    | `1`, `true`, `yes`                          |
+| `GIT_PATH_TRANSPLANT_USE_REBASE`              | unset         | When set, use `git rebase` instead of `git merge` when transplanting history (cleaner linear history) | `1`, `true`                                 |
+| `GIT_PATH_TRANSPLANT_SKIP_DIRTY_CHECK`        | unset         | Skip dirty working directory check before transplant (dangerous – use only if you know what you're doing) | `1`                                         |
+| `GIT_PATH_TRANSPLANT_SKIP_DESTINATION_CHECK`  | unset         | Skip checking if destination path already exists (can overwrite – dangerous)                     | `1`                                         |
+| `GIT_PATH_TRANSPLANT_FORCE`                   | unset         | Force operation even in unsafe conditions (implies above two skips + more aggressive behavior)  | `1`                                         |
+| `GIT_PATH_TRANSPLANT_NO_HISTORY_BRANCH`       | unset         | Do not create `history/<new-path>` backup branch after operation                                 | `1`                                         |
+| `GIT_PATH_TRANSPLANT_DEBUG`                   | unset         | Enable verbose debug output during transplant/move operations                                    | `1`, `true`                                 |
+| `GIT_PATH_TRANSPLANT_VERBOSE`                 | unset         | Slightly less noisy verbose output (progress messages)                                           | `1`                                         |
+| `DEBUG`                                       | unset         | General debug flag – enables extra output in many parts of the codebase                          | `1`, `true` (very common convention)        |
 
-* **`GIT_PATH_TRANSPLANT_ACT_LIKE_CP`**: When set to `1`, the system performs a history-aware copy. The source path remains intact, and a new branch is created to track the history for the destination path.
-* **`DEBUG`**: When set to any non-empty value, the script provides verbose output, including hash comparisons and internal directory states, to assist in troubleshooting.
+### Shading-related environment variables (rarely used directly)
 
-## High-Level Workflow (Implementation)
+| Variable                              | Meaning                                                                                 | Recommended way to control                  |
+|---------------------------------------|-----------------------------------------------------------------------------------------|---------------------------------------------|
+| `GIT_PATH_TRANSPLANT_NO_SHADE_MV`     | Prevent automatic creation of `mv` alias (shaded git-aware version)                    | Use `register_git_mv_shade` / `deregister`  |
+| `GIT_PATH_TRANSPLANT_NO_SHADE_CP`     | Prevent automatic creation of `cp` alias                                                | Use `register_git_cp_shade` / `deregister`  |
+| `GIT_PATH_TRANSPLANT_NO_AUTO_REGISTER`| Do not automatically register shades on script load                                     | —                                           |
 
-1. **Isolation**  
-   Extract all commits that touch the source path into a temporary, flat (root-level) repository.
+## Recommended Safety Workflow (Most Common)
 
-2. **Path rewriting**  
-   Use `git filter-repo --to-subdirectory-filter <destination>`  
-   → moves all files into the target directory prefix
+```bash
+# 1. Extract path from source repo (creates metadata + clean repo)
+meta=$(extract_git_path ./src/featureX)
 
-3. **Object transfer**  
-   Fetch rewritten objects into the original repository
+# 2. Transplant safely into current repo
+git_path_transplant "$meta" modules/featureX-v2
 
-4. **Integration**  
-   - Create an orphan branch `history/<destination-path-slug>`  
-   - Merge it into current branch with `--allow-unrelated-histories`
+# Or with rebase for cleaner history:
+GIT_PATH_TRANSPLANT_USE_REBASE=1 git_path_transplant "$meta" modules/featureX-v2
 
-## Important Technical Notes
+# 3. Or just copy inside same repo with history:
+GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1 git_path_move legacy/code new-home/code-v2
+```
 
-- **Commit hashes always change**  
-  Because file paths are part of the tree object, and tree is part of the commit object.
+## Quick Reference Table – What to Set When
 
-- **Metadata preservation**  
-  Author name/email, committer name/email, author date, commit date, and commit message are copied verbatim.
+Goal                                            | Recommended ENV setting(s)                              | Command example
+-----------------------------------------------|----------------------------------------------------------|--------------------------------------------------------------------------------
+Classic move + history                            | (default)                                                | `git_path_move old new`
+Copy instead of move                              | `GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1`                      | `git_path_move ...`
+Clean linear history on transplant                | `GIT_PATH_TRANSPLANT_USE_REBASE=1`                       | `git_path_transplant ...`
+Debug problems                                    | `DEBUG=1` or `GIT_PATH_TRANSPLANT_DEBUG=1`               | — 
+Very dangerous override (not recommended)         | `GIT_PATH_TRANSPLANT_FORCE=1`                            | — 
+Skip safety checks (experts only)                 | `GIT_PATH_TRANSPLANT_SKIP_DIRTY_CHECK=1` + destination skip | — 
 
-- **Merge nature of operation**  
-  Both move and copy end with a merge commit (usually an octopus or simple two-parent merge).
+## Important Notes
 
-- **Conflict handling**  
-  If destination path already contains files, a regular merge conflict occurs and must be resolved manually.
+- All safety checks (dirty tree, destination exists, ignored path) are **on by default**
+- Force flags should be used **very carefully** – they can cause data loss
+- History branches (`history/...`) are created by default for traceability
+- Temporary files from `extract_git_path` are **not** automatically cleaned (good practice: clean `/tmp/extract-git-path/*` occasionally)
 
-## Limitations & Known Issues
-
-- Does **not** handle submodules correctly (submodule pointers usually break)
-- Large directories with thousands of commits can be slow (but still much faster than `filter-branch`)
-- Binary files are preserved correctly, but delta compression may suffer after rewrite
-
-## Dependencies
-
-- `git` ≥ 2.25 (recommended ≥ 2.35)
-- `git-filter-repo` (Python version ≥ 0.30, commit a40bce5 or newer recommended)
-- `jq` (for metadata/branch name parsing)
-- standard shell utilities (`mktemp`, `sed`, `grep`, etc.)
-
-## Related Testing Evidence
-
-The following behaviors are explicitly verified by automated tests:
-
-- Full intra-repository move (source disappears, destination appears with history)
-- Inter-repository transplant safety (source repository is never modified)
-- Deep/nested path creation (`a/b/c` → `x/y/z/deep/feature`)
-- Copy with multiple commits + file modifications
-- Metadata parity (author, date, message) between original and transplanted chain
-- Relative path handling (`../..`, `.`, etc.)
-- Bypass when flags are used (`-f`, `-v`, `--backup`, etc.)
-- Recursive copy (`cp -r`) forks history correctly
+Good transplanting! 🌱→🌳
 
