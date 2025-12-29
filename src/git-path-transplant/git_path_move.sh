@@ -3,7 +3,7 @@
 git_path_move() {
   local from_path="$1"
   local to_path="$2"
-  local act_like_cp="${ACT_LIKE_CP:-0}"
+  local act_like_cp="${GIT_PATH_TRANSPLANT_ACT_LIKE_CP:-0}"
 
   if [[ $# -ne 2 ]]; then
     echo "ERROR: Usage: git_path_move <from_path> <to_path>" >&2

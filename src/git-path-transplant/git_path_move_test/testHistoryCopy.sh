@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 testHistoryCopy() {
-  echo "🧪 Testing Complex History Copy (ACT_LIKE_CP=1)"
+  echo "🧪 Testing Complex History Copy (GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1)"
   local tmp_dir=$(mktemp -d)
   
   # 1. Setup Source Repo with an evolving history
@@ -25,7 +25,7 @@ testHistoryCopy() {
   local original_commit_count=$(git rev-list --count HEAD)
 
   # 2. Execute the history-aware copy
-  # We use the shaded function which sets ACT_LIKE_CP=1 internally
+  # We use the shaded function which sets GIT_PATH_TRANSPLANT_ACT_LIKE_CP=1 internally
   git_cp_shaded "feature_dir" "legacy_backup"
 
   # 3. VERIFICATION
