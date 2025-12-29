@@ -12,11 +12,11 @@ git_path_move() {
     return 1
   fi
 
-  # 1. Resolve Absolute Paths
+  # 1. Resolve Absolute Paths (Handles relative jump magic like ../..)
   local abs_from_path
   abs_from_path=$(mkdir -p "$(dirname "$from_path")" && cd "$(dirname "$from_path")" && pwd)/$(basename "$from_path")
   abs_from_path=$(realpath -m "$abs_from_path")
-  
+
   local to_dir_part=$(dirname "$to_path")
   mkdir -p "$to_dir_part"
   local abs_to_path=$(cd "$to_dir_part" && pwd)/$(basename "$to_path")
@@ -36,46 +36,49 @@ git_path_move() {
 
   [[ -z "$source_repo_root" ]] && { echo "ERROR: Source not in git repo" >&2; return 1; }
 
-  # 3. Extract History
+  # 3. Extract Repo Metadata
   local meta_file
   meta_file=$(extract_git_path "$abs_from_path") || return 1
-
+  
   # 4. Identify Destination Repo Root
   local dest_repo_root
   dest_repo_root=$(git rev-parse --show-toplevel 2>/dev/null)
   
+  # Calculate relative destination for the transplant engine
   local rel_dest_path="${abs_to_path#$dest_repo_root/}"
   rel_dest_path="${rel_dest_path#/}"
 
-  # 5. Transplant
-  # We only allow effective cleanse if we are in the same repo
+  # 5. Determine if we can actually cleanse
+  # Cleanse only makes sense (and is safe) if we are in the same repo
   local effective_cleanse="0"
-  if [[ "$source_repo_root" == "$dest_repo_root" && "$act_like_cp" != "1" ]]; then
+  if [[ "$source_repo_root" == "$dest_repo_root" ]]; then
     effective_cleanse="$use_cleanse"
   fi
 
+  # 6. Execution
   ( 
     export GIT_PATH_TRANSPLANT_USE_CLEANSE="$effective_cleanse"
     export GIT_PATH_TRANSPLANT_CLEANSE_HOOK="$cleanse_hook"
     cd "$dest_repo_root" && git_path_transplant "$meta_file" "$rel_dest_path" 
   ) || return 1
 
-  # 6. Safety-First Cleanup Logic
-  # CRITICAL FIX: Only remove source if it is in the SAME repo and not in CP mode
+  # 7. Safety-First Cleanup Logic
+  # Only remove source if it is in the SAME repo and not in CP mode
   if [[ "$source_repo_root" == "$dest_repo_root" ]]; then
     if [[ "$act_like_cp" != "1" ]]; then
       if [[ "$effective_cleanse" == "1" ]]; then
-         # Handled by git-cleanse inside transplant
-         : 
+          # History scrubbing handled by git-cleanse inside transplant
+          : 
       else
-        # Standard move: remove the source folder/file
+        # Standard intra-repo move: remove the source folder/file
         rm -rf "$abs_from_path"
         git rm -rf "$abs_from_path" &>/dev/null || true
       fi
     fi
   else
-    echo "📦 Inter-repo move detected: Source preserved for safety."
+    [[ -n "${DEBUG:-}" ]] && echo "DEBUG: Inter-repo move detected: Source preserved for safety." >&2
   fi
 
   rm -rf "$(dirname "$meta_file")"
+  return 0
 }
