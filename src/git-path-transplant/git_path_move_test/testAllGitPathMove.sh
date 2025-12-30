@@ -22,6 +22,7 @@ testAllGitPathMove() {
     "testCleanseHookParity"
     "testUnicodePathMove"
     "testTransplantSafety"
+    "testEquivalentHistoriesExtractIdentically"
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
