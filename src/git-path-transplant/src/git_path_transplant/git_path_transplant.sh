@@ -47,39 +47,16 @@ git_path_transplant() {
     return 1
   }
 
-  # 5. Determine if source is a File or Directory
-  local is_dir=0
-  if [[ "$original_rel_path" == "." || -d "$extracted_repo/$original_rel_path" ]]; then
-    is_dir=1
-  fi
+  # 5. Call the rewrite and merge function
+  _git_path_transplant_rewrite_and_merge "$branch_name" "$dest_path" "$original_rel_path" "$extracted_repo"
 
-  # 6. Rewrite
-  if [[ $is_dir -eq 1 ]]; then
-    git filter-repo --refs "$branch_name" --to-subdirectory-filter "$dest_path" --force --quiet
-  else
-    local src_filename=$(basename "$original_rel_path")
-    git filter-repo --refs "$branch_name" \
-      --filename-callback "return b'$dest_path' if filename == b'$src_filename' else filename" \
-      --force --quiet
-  fi
-
-  # 7. Grafting (Merge Replacement)
-  git rm -rf --cached "$dest_path" &>/dev/null || true
-
-  if ! git merge "$branch_name" --allow-unrelated-histories -X theirs -m "graft: $dest_path history" --quiet; then
-      _log_debug_git_path_transplant "Forcing alignment for $dest_path"
-      git checkout "$branch_name" -- "$dest_path"
-      git add "$dest_path"
-      git commit -m "graft: $dest_path (forced)" --quiet
-  fi
-
-  # 8. RESTORE: STASH POP
+  # 6. RESTORE: STASH POP
   if [[ $stashed -eq 1 ]]; then
     _log_debug_git_path_transplant "Restoring stashed changes..."
     git stash pop --quiet || echo "⚠️  Stash pop resulted in conflicts."
   fi
 
-  # 9. Cleanup (Cleanse) - Guaranteed to have stashed=0 here due to step 1
+  # 7. Cleanup (Cleanse) - Guaranteed to have stashed=0 here due to step 1
   if [[ "$use_cleanse" == "1" ]]; then
     local can_cleanse=true
     if [[ -n "$cleanse_hook" ]]; then
