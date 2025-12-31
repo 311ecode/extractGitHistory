@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-_log_debug() { [[ -n "${DEBUG:-}" ]] && echo "[DEBUG] $*" >&2; }
+
 
 git_path_transplant() {
   local meta_file="$1"
@@ -9,7 +9,7 @@ git_path_transplant() {
   local use_cleanse="${GIT_PATH_TRANSPLANT_USE_CLEANSE:-0}"
   local cleanse_hook="${GIT_PATH_TRANSPLANT_CLEANSE_HOOK:-}"
 
-  _log_debug "--- Starting git_path_transplant ---"
+  _log_debug_git_path_transplant "--- Starting git_path_transplant ---"
   [[ ! -f "$meta_file" ]] && { echo "❌ Meta file missing"; return 1; }
 
   local extracted_repo=$(jq -r '.extracted_repo_path' "$meta_file")
@@ -32,7 +32,7 @@ git_path_transplant() {
   # 2. AUTO-STASH (Only for non-cleanse transplant)
   local stashed=0
   if [[ $is_dirty -eq 1 ]]; then
-    _log_debug "Working tree is dirty. Stashing local changes..."
+    _log_debug_git_path_transplant "Working tree is dirty. Stashing local changes..."
     git stash push -m "temp-stash-transplant" --include-untracked --quiet
     stashed=1
   fi
@@ -67,7 +67,7 @@ git_path_transplant() {
   git rm -rf --cached "$dest_path" &>/dev/null || true
 
   if ! git merge "$branch_name" --allow-unrelated-histories -X theirs -m "graft: $dest_path history" --quiet; then
-      _log_debug "Forcing alignment for $dest_path"
+      _log_debug_git_path_transplant "Forcing alignment for $dest_path"
       git checkout "$branch_name" -- "$dest_path"
       git add "$dest_path"
       git commit -m "graft: $dest_path (forced)" --quiet
@@ -75,7 +75,7 @@ git_path_transplant() {
 
   # 8. RESTORE: STASH POP
   if [[ $stashed -eq 1 ]]; then
-    _log_debug "Restoring stashed changes..."
+    _log_debug_git_path_transplant "Restoring stashed changes..."
     git stash pop --quiet || echo "⚠️  Stash pop resulted in conflicts."
   fi
 
