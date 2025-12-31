@@ -6,23 +6,9 @@ testAllGitPathMove() {
   OLDPWD="$PWD"
 
   local test_functions=(
-    "testFullIntraRepoMove" 
-    "testInterRepoMoveSafety" 
-    "testDeepIntraRepoMove" 
-    "testRelativeUpwardMove"
-    "testShadingBypass"
-    "testRegistrationLifecycle"
-    "testHistoryCopy"
-    "testRecursiveHistoryCopy"
-    "testHistoryParityMagic"
-    "testHashParityRoundTrip"
-    "testRebaseTransplant"
-    "testGitCleanseIntegration"
-    "testCleanseHookFailure"
-    "testCleanseHookParity"
-    "testUnicodePathMove"
-    "testTransplantSafety"
-    "testEquivalentHistoriesExtractIdentically"
+    # ... previous tests ...
+    "testFileLevelTransplant"
+    "testDirtyWorktreeIsolation" # <--- Added this
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests

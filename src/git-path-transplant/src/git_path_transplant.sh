@@ -11,64 +11,75 @@ git_path_transplant() {
 
   _log_debug "--- Starting git_path_transplant ---"
   [[ ! -f "$meta_file" ]] && { echo "❌ Meta file missing"; return 1; }
-  
-  if [[ -e "$dest_path" && "${GIT_PATH_TRANSPLANT_FORCE:-0}" != "1" ]]; then
-     echo "❌ Destination already exists: $dest_path"
-     return 1
-  fi
 
-  local extracted_repo
-  extracted_repo=$(jq -r '.extracted_repo_path' "$meta_file")
-  local original_rel_path
-  original_rel_path=$(jq -r '.relative_path' "$meta_file")
+  local extracted_repo=$(jq -r '.extracted_repo_path' "$meta_file")
+  local original_rel_path=$(jq -r '.relative_path' "$meta_file")
   local branch_name="${GIT_PATH_TRANSPLANT_HISTORY_BRANCH:-history/transplant-default-$(date +%s)}"
 
-  _log_debug "Cleaning stale branch: $branch_name"
+  # 1. PRISTINE CHECK FOR CLEANSE
+  # If we are scrubbing history, the repo MUST be clean because BFG replaces .git
+  local is_dirty=0
+  if ! git diff-index --quiet HEAD --; then
+    is_dirty=1
+    if [[ "$use_cleanse" == "1" ]]; then
+      echo "❌ ERROR: Cannot run CLEANSE on a dirty worktree."
+      echo "💡 Uncommitted changes in files like '$(git diff --name-only | head -n 1)' would be lost."
+      echo "💡 Please commit or stash manually, then retry."
+      return 1
+    fi
+  fi
+
+  # 2. AUTO-STASH (Only for non-cleanse transplant)
+  local stashed=0
+  if [[ $is_dirty -eq 1 ]]; then
+    _log_debug "Working tree is dirty. Stashing local changes..."
+    git stash push -m "temp-stash-transplant" --include-untracked --quiet
+    stashed=1
+  fi
+
+  # 3. Reset Environment
+  rm -rf .git/filter-repo
   git branch -D "$branch_name" &>/dev/null || true
 
+  # 4. Isolated Fetch
   git fetch "$extracted_repo" "HEAD:$branch_name" --force --quiet || {
-    echo "❌ Failed to fetch from extracted repo."
+    [[ $stashed -eq 1 ]] && git stash pop --quiet
     return 1
   }
 
-  _log_debug "Rewriting history (Metadata bypass mode)..."
-
-  # ───────────────────────────────────────────────────────────────
-  # THE FIX: Bypass metadata recording.
-  # We use --path-rename and specifically disable the commit-map 
-  # generation which is where the AssertionError occurs.
-  # ───────────────────────────────────────────────────────────────
-  if ! git filter-repo \
-    --refs "$branch_name" \
-    --path-rename ":$dest_path/" \
-    --force \
-    --quiet; then
-    
-    _log_debug "Filter-repo crashed, but files may be moved. Attempting recovery..."
+  # 5. Determine if source is a File or Directory
+  local is_dir=0
+  if [[ "$original_rel_path" == "." || -d "$extracted_repo/$original_rel_path" ]]; then
+    is_dir=1
   fi
 
-  # Apply history
-  if [[ "${GIT_PATH_TRANSPLANT_USE_REBASE:-}" == "1" ]]; then
-    git rebase "$branch_name" --quiet || { git rebase --abort 2>/dev/null; return 1; }
+  # 6. Rewrite
+  if [[ $is_dir -eq 1 ]]; then
+    git filter-repo --refs "$branch_name" --to-subdirectory-filter "$dest_path" --force --quiet
   else
-    # Allow unrelated histories is vital for the transplant to work
-    git merge "$branch_name" --allow-unrelated-histories -m "graft: $dest_path history" --quiet || {
-        _log_debug "Merge failed, attempting manual stage..."
-        git add "$dest_path"
-    }
+    local src_filename=$(basename "$original_rel_path")
+    git filter-repo --refs "$branch_name" \
+      --filename-callback "return b'$dest_path' if filename == b'$src_filename' else filename" \
+      --force --quiet
   fi
 
-  # ───────────────────────────────────────────────────────────────
-  # CLEANUP STAGE: Fix the "deleted files" issue.
-  # If the source still shows as deleted/dirty, we force the index update.
-  # ───────────────────────────────────────────────────────────────
-  if [[ -n "$original_rel_path" && "$original_rel_path" != "." ]]; then
-    _log_debug "Cleaning up index for: $original_rel_path"
-    git rm -r --cached "$original_rel_path" &>/dev/null || true
-  fi
-  
-  git add "$dest_path"
+  # 7. Grafting (Merge Replacement)
+  git rm -rf --cached "$dest_path" &>/dev/null || true
 
+  if ! git merge "$branch_name" --allow-unrelated-histories -X theirs -m "graft: $dest_path history" --quiet; then
+      _log_debug "Forcing alignment for $dest_path"
+      git checkout "$branch_name" -- "$dest_path"
+      git add "$dest_path"
+      git commit -m "graft: $dest_path (forced)" --quiet
+  fi
+
+  # 8. RESTORE: STASH POP
+  if [[ $stashed -eq 1 ]]; then
+    _log_debug "Restoring stashed changes..."
+    git stash pop --quiet || echo "⚠️  Stash pop resulted in conflicts."
+  fi
+
+  # 9. Cleanup (Cleanse) - Guaranteed to have stashed=0 here due to step 1
   if [[ "$use_cleanse" == "1" ]]; then
     local can_cleanse=true
     if [[ -n "$cleanse_hook" ]]; then
