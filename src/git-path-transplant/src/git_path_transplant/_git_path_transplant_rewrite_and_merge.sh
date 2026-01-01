@@ -1,33 +1,75 @@
 #!/usr/bin/env bash
+
 _git_path_transplant_rewrite_and_merge() {
   local branch_name="$1"
   local dest_path="$2"
   local original_rel_path="$3"
   local extracted_repo="$4"
+
+  # 1. Determine if source was a File or Directory using heuristic
+  local src_filename=$(basename "$original_rel_path")
+  local is_dir=1
   
-  # Determine if source is a File or Directory
-  local is_dir=0
-  if [[ "$original_rel_path" == "." || -d "$extracted_repo/$original_rel_path" ]]; then
-    is_dir=1
+  if [[ -f "$extracted_repo/$src_filename" ]]; then
+     is_dir=0
   fi
 
-  # Rewrite
+  # 2. Rewrite history to the new destination path
   if [[ $is_dir -eq 1 ]]; then
+    _log_debug_git_path_transplant "Detected Directory Transplant. Moving all content to $dest_path"
     git filter-repo --refs "$branch_name" --to-subdirectory-filter "$dest_path" --force --quiet
   else
-    local src_filename=$(basename "$original_rel_path")
+    _log_debug_git_path_transplant "Detected File Transplant. Renaming $src_filename to $dest_path"
     git filter-repo --refs "$branch_name" \
       --filename-callback "return b'$dest_path' if filename == b'$src_filename' else filename" \
       --force --quiet
   fi
 
-  # Grafting (Merge Replacement)
-  git rm -rf --cached "$dest_path" &>/dev/null || true
+  # 3. GRAFTING LOGIC
+  
+  # MODE A: Rebase (Linear History)
+  if [[ "${GIT_PATH_TRANSPLANT_USE_REBASE:-0}" == "1" ]]; then
+      _log_debug_git_path_transplant "Rebasing (Linearizing) history from $branch_name..."
+      
+      # We assume the history branch is a standalone root. We want to replay 
+      # its commits onto the current HEAD.
+      # We use cherry-pick because 'git rebase' often struggles with unrelated histories/detached HEADs in scripts.
+      
+      # Get list of commits in chronological order (reverse)
+      local commits=$(git rev-list --reverse "$branch_name")
+      
+      if [[ -n "$commits" ]]; then
+          # Strategy 'theirs' ensures that if the file already exists (unlikely in a move), the new one wins.
+          if git cherry-pick --strategy=recursive -X theirs --keep-redundant-commits $commits 2>/dev/null; then
+              return 0
+          else
+              _log_debug_git_path_transplant "Cherry-pick failed. Aborting and falling back to Merge Overlay."
+              git cherry-pick --abort 2>/dev/null
+          fi
+      fi
+  fi
 
-  if ! git merge "$branch_name" --allow-unrelated-histories -X theirs -m "graft: $dest_path history" --quiet; then
-      _log_debug_git_path_transplant "Forcing alignment for $dest_path"
-      git checkout "$branch_name" -- "$dest_path"
-      git add "$dest_path"
-      git commit -m "graft: $dest_path (forced)" --quiet
+  # MODE B: Merge Overlay (Preserves History Graph)
+  _log_debug_git_path_transplant "Overlaying history (Merge Strategy)..."
+  
+  mkdir -p "$(dirname "$dest_path")"
+  
+  # 1. Prepare Index: Checkout the content from the branch
+  git checkout "$branch_name" -- .
+  git add "$dest_path"
+  
+  # 2. Commit: Create a merge commit manually if changes exist
+  if ! git diff-index --quiet HEAD --; then
+      local tree=$(git write-tree)
+      local parent1=$(git rev-parse HEAD)
+      local parent2=$(git rev-parse "$branch_name")
+      
+      local commit_msg="graft: $dest_path history transplanted"
+      
+      # Create a commit object with two parents
+      local new_commit=$(echo "$commit_msg" | git commit-tree "$tree" -p "$parent1" -p "$parent2")
+      
+      # Move current branch to this new commit
+      git reset --hard "$new_commit"
   fi
 }
