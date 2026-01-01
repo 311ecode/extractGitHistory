@@ -29,7 +29,7 @@ git_mv_shaded() {
   fi
 
   # 4. Final safety: do both paths look reasonable? (no leading dash, not empty)
-  if [[ -z $src || -z $dst || $src == -* || $dst == -* ]]; then
+  if [[ -z "$src" || -z "$dst" || "$src" == -* || "$dst" == -* ]]; then
     command mv "$src" "$dst"
     return $?
   fi
