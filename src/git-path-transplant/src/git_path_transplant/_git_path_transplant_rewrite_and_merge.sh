@@ -27,19 +27,16 @@ _git_path_transplant_rewrite_and_merge() {
 
   # 3. GRAFTING LOGIC
   
-  # MODE A: Rebase (Linear History)
+  # MODE A: Rebase (Linear History) via Cherry-Pick
   if [[ "${GIT_PATH_TRANSPLANT_USE_REBASE:-0}" == "1" ]]; then
       _log_debug_git_path_transplant "Rebasing (Linearizing) history from $branch_name..."
-      
-      # We assume the history branch is a standalone root. We want to replay 
-      # its commits onto the current HEAD.
-      # We use cherry-pick because 'git rebase' often struggles with unrelated histories/detached HEADs in scripts.
       
       # Get list of commits in chronological order (reverse)
       local commits=$(git rev-list --reverse "$branch_name")
       
       if [[ -n "$commits" ]]; then
           # Strategy 'theirs' ensures that if the file already exists (unlikely in a move), the new one wins.
+          # We use cherry-pick to apply the commits one by one onto HEAD.
           if git cherry-pick --strategy=recursive -X theirs --keep-redundant-commits $commits 2>/dev/null; then
               return 0
           else
@@ -49,7 +46,7 @@ _git_path_transplant_rewrite_and_merge() {
       fi
   fi
 
-  # MODE B: Merge Overlay (Preserves History Graph)
+  # MODE B: Merge Overlay (Preserves History Graph or Fallback)
   _log_debug_git_path_transplant "Overlaying history (Merge Strategy)..."
   
   mkdir -p "$(dirname "$dest_path")"
