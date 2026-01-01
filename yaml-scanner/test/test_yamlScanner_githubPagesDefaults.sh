@@ -5,26 +5,27 @@ test_yamlScanner_githubPagesDefaults() {
     local test_dir=$(mktemp -d)
     local yaml_file="$test_dir/.github-sync.yaml"
     
+    # Create the actual directory so the existence check passes
+    mkdir -p "$test_dir/repo1"
+    
     # Create config with no Pages settings (should use defaults)
-    cat > "$yaml_file" <<'EOF'
+    cat > "$yaml_file" <<EOF
 github_user: testuser
 
 projects:
-  - path: /home/user/projects/repo1
+  - path: $test_dir/repo1
     repo_name: test-repo-1
 EOF
     
-    cd "$test_dir"
     local output
-    output=$(yaml_scanner "$yaml_file" 2>&1)
+    output=$(yaml_scanner "$yaml_file" 2>/dev/null)
     local exit_code=$?
-    
-    cd - >/dev/null
-    rm -rf "$test_dir"
     
     if [[ $exit_code -ne 0 ]]; then
         echo "ERROR: yaml_scanner failed"
-        echo "$output"
+        # Print actual error to help debugging if it fails again
+        yaml_scanner "$yaml_file" 2>&1
+        rm -rf "$test_dir"
         return 1
     fi
     
@@ -33,6 +34,7 @@ EOF
     githubPages=$(echo "$output" | jq -r '.[0].githubPages')
     if [[ "$githubPages" != "false" ]]; then
         echo "ERROR: Expected githubPages='false' by default, got: $githubPages"
+        rm -rf "$test_dir"
         return 1
     fi
     
@@ -41,6 +43,7 @@ EOF
     branch=$(echo "$output" | jq -r '.[0].githubPagesBranch')
     if [[ "$branch" != "main" ]]; then
         echo "ERROR: Expected githubPagesBranch='main' by default, got: $branch"
+        rm -rf "$test_dir"
         return 1
     fi
     
@@ -49,9 +52,11 @@ EOF
     path=$(echo "$output" | jq -r '.[0].githubPagesPath')
     if [[ "$path" != "/" ]]; then
         echo "ERROR: Expected githubPagesPath='/' by default, got: $path"
+        rm -rf "$test_dir"
         return 1
     fi
     
+    rm -rf "$test_dir"
     echo "SUCCESS: GitHub Pages defaults work correctly"
     return 0
 }
