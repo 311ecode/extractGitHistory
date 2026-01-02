@@ -20,7 +20,7 @@ test_full_integration_dry_run() {
   
   # 2. Extract and capture output
   local extraction_output
-  extraction_output=$(extract_git_path "$local_source/subdir")
+  extraction_output=$(gitHistoryTools_extractGitPath "$local_source/subdir")
   
   # Extract ONLY the line that is an absolute path to a .json file
   local meta_file

@@ -8,7 +8,7 @@ test_description_extraction_from_real_readme() {
   git add . && git commit -qm "docs"
   
   local meta_file
-  meta_file=$(extract_git_path "$local_repo/src")
+  meta_file=$(gitHistoryTools_extractGitPath "$local_repo/src")
   local extracted_path
   extracted_path=$(jq -r '.extracted_repo_path' "$meta_file")
   
