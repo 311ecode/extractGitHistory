@@ -14,7 +14,7 @@ test_gitHistoryTools_unified() {
     "testAllGitPathConvergeMerge"
 
     "testGitTransplantWorkflow"
-
+    
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
