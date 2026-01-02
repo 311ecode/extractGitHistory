@@ -19,6 +19,12 @@ test_gitHistoryTools_githubPusher() {
     
     local ignored_tests=()
     
+    # Run tests
     bashTestRunner test_functions ignored_tests
-    return $?
+    local result=$?
+
+    # Always attempt a global cleanup of test repos after the suite finishes
+    github_pusher_test_cleanup
+
+    return $result
 }
