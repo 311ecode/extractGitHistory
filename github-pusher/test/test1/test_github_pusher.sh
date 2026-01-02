@@ -8,7 +8,7 @@ test_github_pusher() {
   export LC_NUMERIC=C
   
   # Ensure cleanup happens even if tests fail
-  trap 'cleanup_test_env' EXIT
+  trap 'github_pusher_test_cleanup_env' EXIT
 
   local test_functions=(
     "test_environment_validation"

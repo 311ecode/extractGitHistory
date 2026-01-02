@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-cleanup_test_env() {
+github_pusher_test_cleanup_env() {
   echo "🧹 Cleaning up test artifacts..."
   # Clean up local temp files
   rm -rf /tmp/extract-git-path/* 2>/dev/null
