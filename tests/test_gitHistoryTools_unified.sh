@@ -9,7 +9,7 @@ test_gitHistoryTools_unified() {
 
     "test_gitHistoryTools_extractGitPath"
     "test_gitHistoryTools_extractGitPath2"
-    "test_extract_git_path"
+    "test_gitHistoryTools_extractGitPath"
 
     "testAllGitPathConvergeMerge"
 

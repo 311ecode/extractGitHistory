@@ -42,9 +42,9 @@ github_sync_workflow_process_projects_helper() {
     local meta_file
     
     if [[ "$debug" == "true" ]]; then
-        meta_file=$(extract_git_path "$path" 2> >(tee "$stderr_capture" >&2))
+        meta_file=$(gitHistoryTools_extractGitPath "$path" 2> >(tee "$stderr_capture" >&2))
     else
-        meta_file=$(extract_git_path "$path" 2>"$stderr_capture")
+        meta_file=$(gitHistoryTools_extractGitPath "$path" 2>"$stderr_capture")
     fi
     
     local extract_exit_code=$?

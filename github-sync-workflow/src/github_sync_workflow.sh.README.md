@@ -333,7 +333,7 @@ Debug output includes:
 
 This workflow is part of the larger Git History Tools ecosystem:
 
-- **`extract_git_path`**: Core extraction functionality
+- **`gitHistoryTools_extractGitPath`**: Core extraction functionality
 - **`github_pusher`**: GitHub repository management
 - **`yaml_scanner`**: Configuration parsing
 
