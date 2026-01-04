@@ -1,58 +1,34 @@
 #!/usr/bin/env bash
 test_githubSyncWorkflow_withPages() {
-    echo "Testing GitHub sync workflow with Pages enabled"
+    echo "Testing GitHub sync workflow with Pages enabled (Ultra-Verbose Real-time)"
     
-    # Use test-specific credentials
     local github_token="${GITHUB_TEST_TOKEN}"
     local github_user="${GITHUB_TEST_ORG}"
+    local debug_flag="${DEBUG:-false}"
     
-    # Check for required credentials
+    # Normalize debug for internal checks
+    [[ "$debug_flag" == "1" ]] && debug_flag="true"
+
     if [[ -z "$github_token" ]] || [[ -z "$github_user" ]]; then
         echo "SKIPPED: GITHUB_TEST_TOKEN and GITHUB_TEST_ORG required"
         return 0
     fi
     
-    # Generate unique test repo name
     local timestamp=$(date +%s)
     local test_repo_name="src-test-workflow-pages-${timestamp}"
     
-    if [[ -n "${DEBUG:-}" ]]; then
-        echo "DEBUG: Test repo name: $test_repo_name" >&2
-        echo "DEBUG: Creating test git repo with website content..." >&2
-    fi
-    
-    # Create test git repo with website content
+    # --- SETUP PHASE ---
     local test_repo=$(mktemp -d)
     cd "$test_repo"
     git init >/dev/null 2>&1
-    git config user.name "Test User" >/dev/null 2>&1
-    git config user.email "test@example.com" >/dev/null 2>&1
+    git config user.name "Test User"
+    git config user.email "test@example.com"
     
-    # Create src directory with website files
     mkdir -p src
-    cat > src/index.html <<'EOF'
-<!DOCTYPE html>
-<html>
-<head><title>Test Site</title></head>
-<body><h1>Hello from GitHub Pages</h1></body>
-</html>
-EOF
-    
-    cat > src/README.md <<'EOF'
-# Test Website
-
-This is a test website for GitHub Pages.
-EOF
-    
+    echo "<html><body><h1>Hello from GitHub Pages</h1></body></html>" > src/index.html
     git add . >/dev/null 2>&1
     git commit -m "Add website files" >/dev/null 2>&1
     
-    if [[ -n "${DEBUG:-}" ]]; then
-        echo "DEBUG: Repo structure:" >&2
-        find . -type f | grep -v '\.git' >&2
-    fi
-    
-    # Create YAML config with Pages enabled
     local config_dir=$(mktemp -d)
     local yaml_file="$config_dir/.github-sync.yaml"
     local json_output="$config_dir/projects.json"
@@ -60,93 +36,83 @@ EOF
     cat > "$yaml_file" <<EOF
 github_user: ${github_user}
 json_output: ${json_output}
-
 projects:
   - path: ${test_repo}/src
     repo_name: ${test_repo_name}
+    private: false
     githubPages: true
     githubPagesBranch: main
     githubPagesPath: /
 EOF
     
-    if [[ -n "${DEBUG:-}" ]]; then
-        echo "DEBUG: YAML config:" >&2
-        cat "$yaml_file" >&2
-    fi
-    
+    # --- EXECUTION PHASE (REAL-TIME DEBUG) ---
     cd "$config_dir"
     
-    # Run workflow
-    local output
-    output=$(github_sync_workflow "$yaml_file" "false" 2>&1)
+    echo "DEBUG: Starting Workflow Execution..." >&2
+    # Execute directly so stderr/stdout stream to the terminal in real-time
+    github_sync_workflow "$yaml_file" "false" "$debug_flag"
     local exit_code=$?
     
-    # Cleanup test repo and config
-    cd - >/dev/null
-    rm -rf "$test_repo"
-    rm -rf "$config_dir"
-    
     if [[ $exit_code -ne 0 ]]; then
-        echo "ERROR: Workflow failed"
-        echo "$output"
+        echo "ERROR: Workflow failed with exit code $exit_code" >&2
         github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "false"
         return 1
     fi
+
+    # --- POLLING PHASE ---
+    echo "DEBUG: Waiting for GitHub Pages to initialize..." >&2
+    local max_attempts=20
+    local attempt=1
+    local site_live=false
+    local pages_url="https://${github_user}.github.io/${test_repo_name}/"
+
     
-    # Verify Pages enablement in output
-    if ! echo "$output" | grep -q "GitHub Pages: enabled"; then
-        echo "ERROR: Missing 'GitHub Pages: enabled' in output"
-        echo "$output"
-        github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "false"
-        return 1
+
+    while [ $attempt -le $max_attempts ]; do
+        # Use curl to check status and headers
+        local header_dump=$(mktemp)
+        local http_status=$(curl -s -o /dev/null -D "$header_dump" -I -w "%{http_code}" "$pages_url")
+        
+        echo "DEBUG: Attempt $attempt/$max_attempts - URL: $pages_url - Status: $http_status" >&2
+        
+        if [[ "$debug_flag" == "true" && "$http_status" != "200" ]]; then
+            echo "DEBUG: HTTP Headers from GitHub:" >&2
+            cat "$header_dump" | sed 's/^/  /' >&2
+        fi
+        rm -f "$header_dump"
+
+        if [[ "$http_status" == "200" ]]; then
+            echo "✓ Success: Site is live!"
+            site_live=true
+            break
+        fi
+        
+        echo "DEBUG: Site not ready. Sleeping 10s..." >&2
+        sleep 10
+        ((attempt++))
+    done
+
+    # --- CONTENT VERIFICATION ---
+    if [[ "$site_live" == "true" ]]; then
+        local dl_content=$(curl -s "$pages_url")
+        if [[ "$dl_content" == *"Hello from GitHub Pages"* ]]; then
+            echo "✓ Content verified!"
+        else
+            echo "ERROR: Content mismatch! Downloaded: $dl_content" >&2
+            site_live=false
+        fi
     fi
-    
-    if ! echo "$output" | grep -q "Enabling GitHub Pages"; then
-        echo "ERROR: Missing 'Enabling GitHub Pages' message"
-        echo "$output"
-        github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "false"
-        return 1
-    fi
-    
-    # Verify repo exists
-    if ! github_pusher_check_repo_exists "$github_user" "$test_repo_name" "$github_token" "false"; then
-        echo "ERROR: Repository was not created"
-        echo "$output"
-        return 1
-    fi
-    
-    echo "Repository created: ${test_repo_name}"
-    
-    if [[ -n "${DEBUG:-}" ]]; then
-        echo "DEBUG: Checking Pages status via API..." >&2
-    fi
-    
-    # Give GitHub time to process Pages
-    sleep 3
-    
-    # Check Pages via API
-    local pages_info
-    pages_info=$(curl -s -H "Authorization: token $github_token" \
-        "https://api.github.com/repos/$github_user/$test_repo_name/pages")
-    
-    if [[ -n "${DEBUG:-}" ]]; then
-        echo "DEBUG: Pages API response:" >&2
-        echo "$pages_info" | jq '.' >&2
-    fi
-    
-    local pages_url
-    pages_url=$(echo "$pages_info" | jq -r '.html_url // empty')
-    
-    if [[ -n "$pages_url" ]]; then
-        echo "✓ GitHub Pages URL: $pages_url"
-    else
-        echo "WARNING: Pages URL not yet available (may still be building)"
-    fi
-    
+
     # Cleanup
-    github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "${DEBUG:-false}"
-    echo "Repository deleted: ${test_repo_name}"
+    echo "DEBUG: Cleaning up test repository..." >&2
+    github_pusher_delete_repo "$github_user" "$test_repo_name" "$github_token" "false"
+    rm -rf "$test_repo" "$config_dir"
     
-    echo "SUCCESS: Workflow with Pages works end-to-end"
-    return 0
+    if [[ "$site_live" == "true" ]]; then
+        echo "SUCCESS: End-to-end Pages workflow verified."
+        return 0
+    else
+        echo "FAILED: Test timed out or verification failed."
+        return 1
+    fi
 }

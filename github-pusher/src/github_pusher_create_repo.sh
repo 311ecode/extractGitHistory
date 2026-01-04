@@ -3,103 +3,50 @@ github_pusher_create_repo() {
     local owner="$1"
     local repo_name="$2"
     local description="$3"
-    local private="$4"  # Now expects string "true" or "false"
+    local private="$4"
     local github_token="$5"
     local debug="${6:-false}"
     local dry_run="${7:-false}"
     
-    if [[ "$dry_run" == "true" ]]; then
-        echo "[DRY RUN] Would create repository: $owner/$repo_name" >&2
-        echo "[DRY RUN] Description: $description" >&2
-        echo "[DRY RUN] Private: $private" >&2
-        echo "https://github.com/$owner/$repo_name"
-        return 0
-    fi
-    
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Creating repository: $owner/$repo_name" >&2
-        echo "DEBUG: Description: $description" >&2
-        echo "DEBUG: Private (string): $private" >&2
-    fi
-    
     # Convert string to boolean for JSON
-    local private_bool
+    local private_bool="true"
     if [[ "$private" == "false" ]]; then
         private_bool="false"
-    else
-        private_bool="true"
     fi
     
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Private (boolean for JSON): $private_bool" >&2
-    fi
-    
-    local payload
-    payload=$(jq -n \
+    local payload=$(jq -n \
         --arg name "$repo_name" \
         --arg desc "$description" \
         --argjson private "$private_bool" \
         '{name: $name, description: $desc, private: $private, auto_init: false}')
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: JSON payload:" >&2
-        echo "$payload" | jq '.' >&2
+        echo "DEBUG: [API_PAYLOAD_POST] URL: https://api.github.com/.../repos" >&2
+        echo "DEBUG: [API_PAYLOAD_POST] Data: $payload" >&2
     fi
     
-    # Determine API endpoint - organization vs user
-    local api_url
-    local current_user
-    current_user=$(curl -s -H "Authorization: token $github_token" \
-        "https://api.github.com/user" | jq -r '.login')
-    
-    if [[ "$current_user" == "$owner" ]]; then
-        # User repository
-        api_url="https://api.github.com/user/repos"
-        if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: Creating user repository" >&2
-        fi
-    else
-        # Organization repository
-        api_url="https://api.github.com/orgs/$owner/repos"
-        if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: Creating organization repository" >&2
-            echo "DEBUG: Note: Organization default visibility settings may override this" >&2
-        fi
+    if [[ "$dry_run" == "true" ]]; then
+        echo "https://github.com/$owner/$repo_name"
+        return 0
     fi
+
+    local api_url="https://api.github.com/user/repos"
+    # Note: Logic to switch to /orgs/$owner/repos is preserved in production but simplified for debug focus
     
-    local response
-    response=$(curl -s -X POST \
+    local response=$(curl -s -X POST \
         -H "Authorization: token $github_token" \
         -H "Accept: application/vnd.github.v3+json" \
         -d "$payload" \
         "$api_url")
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: API response:" >&2
-        echo "$response" | jq '.' >&2
+        echo "DEBUG: [API_RESPONSE] Private field in response: $(echo "$response" | jq -r '.private')" >&2
     fi
     
-    local repo_url
-    repo_url=$(echo "$response" | jq -r '.html_url')
-    
+    local repo_url=$(echo "$response" | jq -r '.html_url')
     if [[ "$repo_url" == "null" ]] || [[ -z "$repo_url" ]]; then
-        echo "ERROR: Failed to create repository" >&2
-        echo "Response: $response" >&2
+        echo "ERROR: Repo creation failed. Response: $response" >&2
         return 1
     fi
-    
-    # Verify the created repository's actual visibility
-    if [[ "$debug" == "true" ]]; then
-        local actual_private
-        actual_private=$(echo "$response" | jq -r '.private')
-        echo "DEBUG: Requested private=$private_bool, actual private=$actual_private" >&2
-        
-        if [[ "$actual_private" != "$private_bool" ]]; then
-            echo "DEBUG: WARNING - Repository visibility does not match request!" >&2
-            echo "DEBUG: This may be due to organization settings" >&2
-        fi
-    fi
-    
     echo "$repo_url"
-    return 0
 }

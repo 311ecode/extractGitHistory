@@ -5,100 +5,38 @@ github_sync_workflow_process_projects() {
     local debug="$3"
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: github_sync_workflow_process_projects - Reading JSON from: $json_output" >&2
-        echo "DEBUG: JSON contents:" >&2
+        echo "DEBUG: [JSON_DUMP] Reading intermediate file: $json_output" >&2
         cat "$json_output" | jq '.' >&2
-        echo "DEBUG: ---" >&2
     fi
     
-    # Step 2: Process each project
-    local project_count
-    project_count=$(jq 'length' "$json_output")
-    
+    local project_count=$(jq 'length' "$json_output")
     echo "Found $project_count project(s) to sync" >&2
-    echo "" >&2
     
     local success_count=0
     local fail_count=0
     
     for ((i=0; i<project_count; i++)); do
-        local project
-        project=$(jq -c ".[$i]" "$json_output")
-        
-        if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: Processing project $i:" >&2
-            echo "$project" | jq '.' >&2
-        fi
-        
-        local github_user
-        github_user=$(echo "$project" | jq -r '.github_user')
-        
-        local path
-        path=$(echo "$project" | jq -r '.path')
-        
-        local repo_name
-        repo_name=$(echo "$project" | jq -r '.repo_name')
-        
-        local private
-        private=$(echo "$project" | jq -r '.private')
-        
-        local forcePush
-        forcePush=$(echo "$project" | jq -r '.forcePush')
-        
-        local githubPages
-        githubPages=$(echo "$project" | jq -r '.githubPages')
-        
-        local githubPagesBranch
-        githubPagesBranch=$(echo "$project" | jq -r '.githubPagesBranch')
-        
-        local githubPagesPath
-        githubPagesPath=$(echo "$project" | jq -r '.githubPagesPath')
-        
-        if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: Extracted values:" >&2
-            echo "DEBUG:   github_user='$github_user'" >&2
-            echo "DEBUG:   path='$path'" >&2
-            echo "DEBUG:   repo_name='$repo_name'" >&2
-            echo "DEBUG:   private='$private'" >&2
-            echo "DEBUG:   forcePush='$forcePush'" >&2
-            echo "DEBUG:   githubPages='$githubPages'" >&2
-            echo "DEBUG:   githubPagesBranch='$githubPagesBranch'" >&2
-            echo "DEBUG:   githubPagesPath='$githubPagesPath'" >&2
-        fi
+        local project=$(jq -c ".[$i]" "$json_output")
+        local private=$(echo "$project" | jq -r '.private')
+        local github_user=$(echo "$project" | jq -r '.github_user')
+        local repo_name=$(echo "$project" | jq -r '.repo_name')
+        local path=$(echo "$project" | jq -r '.path')
+        local forcePush=$(echo "$project" | jq -r '.forcePush')
+        local githubPages=$(echo "$project" | jq -r '.githubPages')
+        local githubPagesBranch=$(echo "$project" | jq -r '.githubPagesBranch')
+        local githubPagesPath=$(echo "$project" | jq -r '.githubPagesPath')
         
         echo "========================================" >&2
         echo "Processing: $github_user/$repo_name" >&2
-        echo "Path: $path" >&2
         echo "Private: $private" >&2
-        echo "Force Push: $forcePush" >&2
-        if [[ "$githubPages" == "true" ]]; then
-            echo "GitHub Pages: enabled (branch=$githubPagesBranch, path=$githubPagesPath)" >&2
-        else
-            echo "GitHub Pages: disabled" >&2
-        fi
         echo "========================================" >&2
         
-        # Process individual project
         if ! github_sync_workflow_process_projects_helper "$project" "$dry_run" "$debug"; then
             ((fail_count++))
         else
             ((success_count++))
         fi
-        
-        echo "" >&2
     done
     
-    # Summary
-    echo "========================================" >&2
-    echo "Sync Complete" >&2
-    echo "========================================" >&2
-    echo "Success: $success_count" >&2
-    echo "Failed:  $fail_count" >&2
-    echo "" >&2
-    
-    if [[ $fail_count -gt 0 ]]; then
-        return 1
-    fi
-    
-    return 0
+    [[ $fail_count -gt 0 ]] && return 1 || return 0
 }

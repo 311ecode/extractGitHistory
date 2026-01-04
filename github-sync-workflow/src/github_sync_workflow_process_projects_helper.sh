@@ -4,72 +4,45 @@ github_sync_workflow_process_projects_helper() {
     local dry_run="$2"
     local debug="$3"
     
-    # Normalize debug value
-    if [[ "$debug" == "1" ]]; then
-        debug="true"
-    fi
+    if [[ "$debug" == "1" ]]; then debug="true"; fi
     
-    local github_user
-    github_user=$(echo "$project" | jq -r '.github_user')
+    # Use local to prevent leakage/overwriting
+    local github_user=$(echo "$project" | jq -r '.github_user')
+    local project_path=$(echo "$project" | jq -r '.path') # Renamed to project_path for clarity
+    local repo_name=$(echo "$project" | jq -r '.repo_name')
+    local private=$(echo "$project" | jq -r '.private')
+    local forcePush=$(echo "$project" | jq -r '.forcePush')
+    local githubPages=$(echo "$project" | jq -r '.githubPages')
+    local githubPagesBranch=$(echo "$project" | jq -r '.githubPagesBranch')
+    local githubPagesPath=$(echo "$project" | jq -r '.githubPagesPath')
     
-    local path
-    path=$(echo "$project" | jq -r '.path')
-    
-    local repo_name
-    repo_name=$(echo "$project" | jq -r '.repo_name')
-    
-    local private
-    private=$(echo "$project" | jq -r '.private')
-    
-    local forcePush
-    forcePush=$(echo "$project" | jq -r '.forcePush')
-    
-    local githubPages
-    githubPages=$(echo "$project" | jq -r '.githubPages')
-    
-    local githubPagesBranch
-    githubPagesBranch=$(echo "$project" | jq -r '.githubPagesBranch')
-    
-    local githubPagesPath
-    githubPagesPath=$(echo "$project" | jq -r '.githubPagesPath')
-    
-    # Step 2a: Extract git history
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: process_projects_helper - Extracting git history from: $path" >&2
+        echo "DEBUG: [HELPER_IN] Targeting Path: '$project_path'" >&2
+        echo "DEBUG: [HELPER_IN] Visibility: '$private'" >&2
     fi
-    
+
+    # CRITICAL: Verify the path exists before calling git tools
+    if [[ ! -d "$project_path" ]]; then
+        echo "ERROR: Target path does not exist or is not a directory: $project_path" >&2
+        return 1
+    fi
+
     local stderr_capture=$(mktemp)
     local meta_file
     
-    if [[ "$debug" == "true" ]]; then
-        meta_file=$(gitHistoryTools_extractGitPath "$path" 2> >(tee "$stderr_capture" >&2))
-    else
-        meta_file=$(gitHistoryTools_extractGitPath "$path" 2>"$stderr_capture")
-    fi
-    
+    # Call extraction on the specific project_path
+    meta_file=$(gitHistoryTools_extractGitPath "$project_path" 2>"$stderr_capture")
     local extract_exit_code=$?
-    rm -f "$stderr_capture"
     
     if [[ $extract_exit_code -ne 0 ]]; then
-        echo "ERROR: Git extraction failed for $path" >&2
+        echo "ERROR: Git extraction failed for $project_path" >&2
+        cat "$stderr_capture" >&2
+        rm -f "$stderr_capture"
         return 1
     fi
+    rm -f "$stderr_capture"
     
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: process_projects_helper - Meta file created: $meta_file" >&2
-    fi
-    
-    # Step 2b: Inject custom settings into meta.json
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: process_projects_helper - Injecting custom settings" >&2
-        echo "DEBUG: process_projects_helper - repo_name: $repo_name" >&2
-        echo "DEBUG: process_projects_helper - private: $private" >&2
-        echo "DEBUG: process_projects_helper - forcePush: $forcePush" >&2
-        echo "DEBUG: process_projects_helper - githubPages: $githubPages" >&2
-        echo "DEBUG: process_projects_helper - githubPagesBranch: $githubPagesBranch" >&2
-        echo "DEBUG: process_projects_helper - githubPagesPath: $githubPagesPath" >&2
-    fi
-    
+    # Inject custom settings into meta.json
     local temp_meta=$(mktemp)
     jq --arg repo_name "$repo_name" \
        --arg private "$private" \
@@ -83,30 +56,23 @@ github_sync_workflow_process_projects_helper() {
         .custom_githubPages = $githubPages |
         .custom_githubPagesBranch = $githubPagesBranch |
         .custom_githubPagesPath = $githubPagesPath' \
-       "$meta_file" > "$temp_meta"
+        "$meta_file" > "$temp_meta"
     mv "$temp_meta" "$meta_file"
     
     if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: process_projects_helper - Updated meta.json:" >&2
-        jq '.custom_repo_name, .custom_private, .custom_forcePush, .custom_githubPages, .custom_githubPagesBranch, .custom_githubPagesPath' "$meta_file" >&2
+        echo "DEBUG: [META_INJECTED] Meta file: $meta_file" >&2
+        echo "DEBUG: [META_INJECTED] custom_private: $(jq -r '.custom_private' "$meta_file")" >&2
     fi
     
-    # Step 2c: Push to GitHub - export DEBUG so github_pusher sees it
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: process_projects_helper - Pushing to GitHub as $github_user/$repo_name" >&2
-        export DEBUG=true
-    fi
-    
+    export DEBUG="$debug"
     local github_url
     github_url=$(github_pusher "$meta_file" "$dry_run" 2>&1)
     local pusher_exit_code=$?
     
     if [[ $pusher_exit_code -ne 0 ]]; then
-        echo "ERROR: GitHub push failed for $repo_name" >&2
         echo "$github_url" >&2
         return 1
-    else
-        echo "✓ Successfully synced: $github_url" >&2
-        return 0
     fi
+    echo "✓ Successfully synced: $github_url" >&2
+    return 0
 }
