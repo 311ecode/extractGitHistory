@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 github_pusher() {
+  command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 1)"
+
   local meta_file="$1"
   local dry_run="${2:-false}"
   local debug="${DEBUG:-false}"
