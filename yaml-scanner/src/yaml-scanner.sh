@@ -1,136 +1,135 @@
 #!/usr/bin/env bash
 # YAML scanner for extracting GitHub repository metadata
 
-
 yaml_scanner() {
-    command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 0)"
-    
-    local yaml_file="${1:-.github-sync.yaml}"
-    local debug="${DEBUG:-false}"
-    
-    # If no argument provided, look for default file in current directory
-    if [[ ! -f "$yaml_file" ]]; then
-        echo "ERROR: YAML file not found: $yaml_file" >&2
-        return 1
+  command -v markdown-show-help-registration &>/dev/null && eval "$(markdown-show-help-registration --minimum-parameters 0)"
+
+  local yaml_file="${1:-.github-sync.yaml}"
+  local debug="${DEBUG:-false}"
+
+  # If no argument provided, look for default file in current directory
+  if [[ ! -f $yaml_file ]]; then
+    echo "ERROR: YAML file not found: $yaml_file" >&2
+    return 1
+  fi
+
+  if [[ $debug == "true" ]]; then
+    echo "DEBUG: yaml_scanner - Scanning YAML file: $yaml_file" >&2
+    echo "DEBUG: YAML contents:" >&2
+    cat "$yaml_file" >&2
+    echo "DEBUG: ---" >&2
+  fi
+
+  # Parse and validate YAML
+  if ! yaml_scanner_parse_config "$yaml_file" "$debug"; then
+    return 1
+  fi
+
+  # Get github_user (required at top level)
+  local github_user
+  github_user=$(yaml_scanner_get_github_user "$yaml_file")
+
+  if [[ -z $github_user ]] || [[ $github_user == "null" ]]; then
+    echo "ERROR: github_user not found in YAML" >&2
+    return 1
+  fi
+
+  if [[ $debug == "true" ]]; then
+    echo "DEBUG: GitHub user: $github_user" >&2
+  fi
+
+  # Get json_output path (optional)
+  local json_output
+  json_output=$(yaml_scanner_get_json_output_path "$yaml_file")
+
+  if [[ -n $json_output ]] && [[ $json_output != "null" ]]; then
+    if [[ $debug == "true" ]]; then
+      echo "DEBUG: JSON output will be saved to: $json_output" >&2
     fi
-    
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: yaml_scanner - Scanning YAML file: $yaml_file" >&2
-        echo "DEBUG: YAML contents:" >&2
-        cat "$yaml_file" >&2
-        echo "DEBUG: ---" >&2
+  fi
+
+  # Get number of projects
+  local project_count
+  project_count=$(yaml_scanner_get_project_count "$yaml_file")
+
+  if [[ -z $project_count ]] || [[ $project_count == "null" ]] || [[ $project_count -eq 0 ]]; then
+    echo "ERROR: No projects found in YAML" >&2
+    return 1
+  fi
+
+  if [[ $debug == "true" ]]; then
+    echo "DEBUG: Found $project_count projects" >&2
+  fi
+
+  # Build JSON output
+  local json_content=""
+
+  # Start JSON array
+  json_content+="["$'\n'
+
+  # Extract each project and fail fast if an error occurs.
+  local first=true
+  for ((i = 0; i < project_count; i++)); do
+    if [[ $debug == "true" ]]; then
+      echo "DEBUG: Processing project $i..." >&2
     fi
-    
-    # Parse and validate YAML
-    if ! yaml_scanner_parse_config "$yaml_file" "$debug"; then
-        return 1
-    fi
-    
-    # Get github_user (required at top level)
-    local github_user
-    github_user=$(yaml_scanner_get_github_user "$yaml_file")
-    
-    if [[ -z "$github_user" ]] || [[ "$github_user" == "null" ]]; then
-        echo "ERROR: github_user not found in YAML" >&2
-        return 1
-    fi
-    
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: GitHub user: $github_user" >&2
-    fi
-    
-    # Get json_output path (optional)
-    local json_output
-    json_output=$(yaml_scanner_get_json_output_path "$yaml_file")
-    
-    if [[ -n "$json_output" ]] && [[ "$json_output" != "null" ]]; then
-        if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: JSON output will be saved to: $json_output" >&2
-        fi
-    fi
-    
-    # Get number of projects
-    local project_count
-    project_count=$(yaml_scanner_get_project_count "$yaml_file")
-    
-    if [[ -z "$project_count" ]] || [[ "$project_count" == "null" ]] || [[ "$project_count" -eq 0 ]]; then
-        echo "ERROR: No projects found in YAML" >&2
-        return 1
-    fi
-    
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Found $project_count projects" >&2
-    fi
-    
-    # Build JSON output
-    local json_content=""
-    
-    # Start JSON array
-    json_content+="["$'\n'
-    
-    # Extract each project and fail fast if an error occurs.
-    local first=true
-    for ((i=0; i<project_count; i++)); do
-        if [[ "$debug" == "true" ]]; then
-            echo "DEBUG: Processing project $i..." >&2
-        fi
-        
-        local project_json
-        # IMPORTANT: Output of extract_project is redirected to json_content (stdout).
-        # Errors are already written to stderr in extract_project.
-        project_json=$(yaml_scanner_extract_project "$yaml_file" "$github_user" "$i" "$debug")
-        local extract_exit_code=$?
-        
-        if [[ $extract_exit_code -eq 0 ]]; then
-            if [[ "$first" == "true" ]]; then
-                first=false
-            else
-                json_content+=","$'\n'
-            fi
-            json_content+="$(echo "$project_json" | sed 's/^/  /')"  # Indent for array
-        else
-            # Fail fast. The specific error message was already printed to stderr by
-            # yaml_scanner_extract_project. We simply exit 1 now.
-            echo "ERROR: YAML scan halted due to project validation failure." >&2
-            return 1
-        fi
-    done
-    
-    # End JSON array
-    json_content+=$'\n'"]"
-    
-    if [[ "$debug" == "true" ]]; then
-        echo "DEBUG: Final JSON content:" >&2
-        echo "$json_content" | jq '.' >&2
-    fi
-    
-    # Output or save JSON
-    if [[ -n "$json_output" ]] && [[ "$json_output" != "null" ]]; then
-        # Create directory if it doesn't exist
-        local output_dir
-        output_dir=$(dirname "$json_output")
-        if [[ ! -d "$output_dir" ]]; then
-            mkdir -p "$output_dir"
-        fi
-        
-        # Write to file
-        echo "$json_content" > "$json_output"
-        
-        if [[ $? -eq 0 ]]; then
-            echo "JSON output saved to: $json_output" >&2
-            
-            if [[ "$debug" == "true" ]]; then
-                echo "DEBUG: Verifying saved file:" >&2
-                cat "$json_output" | jq '.' >&2
-            fi
-        else
-            echo "ERROR: Failed to write JSON output to: $json_output" >&2
-            return 1
-        fi
+
+    local project_json
+    # IMPORTANT: Output of extract_project is redirected to json_content (stdout).
+    # Errors are already written to stderr in extract_project.
+    project_json=$(yaml_scanner_extract_project "$yaml_file" "$github_user" "$i" "$debug")
+    local extract_exit_code=$?
+
+    if [[ $extract_exit_code -eq 0 ]]; then
+      if [[ $first == "true" ]]; then
+        first=false
+      else
+        json_content+=","$'\n'
+      fi
+      json_content+="$(echo "$project_json" | sed 's/^/  /')" # Indent for array
     else
-        # Output to stdout
-        echo "$json_content"
+      # Fail fast. The specific error message was already printed to stderr by
+      # yaml_scanner_extract_project. We simply exit 1 now.
+      echo "ERROR: YAML scan halted due to project validation failure." >&2
+      return 1
     fi
-    
-    return 0
+  done
+
+  # End JSON array
+  json_content+=$'\n'"]"
+
+  if [[ $debug == "true" ]]; then
+    echo "DEBUG: Final JSON content:" >&2
+    echo "$json_content" | jq '.' >&2
+  fi
+
+  # Output or save JSON
+  if [[ -n $json_output ]] && [[ $json_output != "null" ]]; then
+    # Create directory if it doesn't exist
+    local output_dir
+    output_dir=$(dirname "$json_output")
+    if [[ ! -d $output_dir ]]; then
+      mkdir -p "$output_dir"
+    fi
+
+    # Write to file
+    echo "$json_content" >"$json_output"
+
+    if [[ $? -eq 0 ]]; then
+      echo "JSON output saved to: $json_output" >&2
+
+      if [[ $debug == "true" ]]; then
+        echo "DEBUG: Verifying saved file:" >&2
+        cat "$json_output" | jq '.' >&2
+      fi
+    else
+      echo "ERROR: Failed to write JSON output to: $json_output" >&2
+      return 1
+    fi
+  else
+    # Output to stdout
+    echo "$json_content"
+  fi
+
+  return 0
 }
