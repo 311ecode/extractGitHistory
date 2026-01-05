@@ -6,7 +6,7 @@
 
 test_github_pusher() {
   export LC_NUMERIC=C
-  
+
   # Ensure cleanup happens even if tests fail
   trap 'github_pusher_test_cleanup_env' EXIT
 
@@ -23,11 +23,3 @@ test_github_pusher() {
   bashTestRunner test_functions ignored_tests
   return $?
 }
-
-
-
-
-
-
-
-

@@ -4,7 +4,7 @@ github_pusher_test_cleanup_env() {
   # Clean up local temp files
   rm -rf /tmp/extract-git-path/* 2>/dev/null
   # Clean up GitHub test repos (using the atomic cleanup function)
-  if [[ -n "$GITHUB_TEST_TOKEN" ]]; then
+  if [[ -n $GITHUB_TEST_TOKEN ]]; then
     cleanupGithubRepos --yes "gh-pusher-test-*"
   fi
 }
