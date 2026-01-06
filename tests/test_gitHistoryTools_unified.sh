@@ -7,15 +7,16 @@ test_gitHistoryTools_unified() {
     "test_gitHistoryTools_githubPusher"
     "test_gitHistoryTools_yamlScanner"
 
-    "test_gitHistoryTools_extractGitPath"
+    "test_gitHistoryTools_extractGitPath1"
     "test_gitHistoryTools_extractGitPath2"
-    "test_gitHistoryTools_extractGitPath"
 
-    "testAllGitPathConvergeMerge"
+    "test-path-transplat-AllGitPathConvergeMerge"
 
     "testGitTransplantWorkflow"
 
     "test_github_pusher_all"
+
+    "test-git-path-atomic-sync-suite"
 
   )
   local ignored_tests=()
