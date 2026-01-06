@@ -100,7 +100,7 @@ YAML Config → YAML Scanner → JSON Metadata
 
 ```bash
 # Run all tests
-./tests/test_gitHistoryTools_unified.sh
+./tests/test_extractGitHistory2_unified.sh
 
 # Run specific component tests
 ./tests/extract-git-path/test_gitHistoryTools_extractGitPath.sh

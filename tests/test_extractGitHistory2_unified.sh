@@ -1,14 +1,11 @@
 #!/usr/bin/env bash
-test_gitHistoryTools_unified() {
+test_extractGitHistory2_unified() {
   export LC_NUMERIC=C
   # Unified test registry combining both suites
   local test_functions=(
     # extract-git-path suite
     "test_gitHistoryTools_githubPusher"
     "test_gitHistoryTools_yamlScanner"
-
-    "test_gitHistoryTools_extractGitPath1"
-    "test_gitHistoryTools_extractGitPath2"
 
     "test-path-transplat-AllGitPathConvergeMerge"
 
