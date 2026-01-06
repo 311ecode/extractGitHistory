@@ -10,6 +10,18 @@ github_pusher() {
   local github_token="${GITHUB_TEST_TOKEN:-${GITHUB_TOKEN}}"
   local github_user="${GITHUB_TEST_ORG:-${GITHUB_USER}}"
 
+  # --- VALIDATION GUARD CLAUSES ---
+  if [[ -z "$github_token" ]]; then
+    echo "ERROR: GITHUB_TOKEN or GITHUB_TEST_TOKEN must be set" >&2
+    return 1
+  fi
+
+  if [[ -z "$github_user" ]]; then
+    echo "ERROR: GITHUB_USER or GITHUB_TEST_ORG must be set" >&2
+    return 1
+  fi
+  # --------------------------------
+
   github_pusher_parse_meta_json "$meta_file" "$debug" || return 1
   local repo_name=$(github_pusher_generate_repo_name "$meta_file" "$debug")
   local extracted_repo_path=$(jq -r '.extracted_repo_path' "$meta_file")
@@ -38,9 +50,7 @@ github_pusher() {
     github_pusher_enable_pages "$github_user" "$repo_name" "$branch" "$path" "$github_token" "$debug" "$extracted_repo_path"
   fi
 
-  # ---------------------------------------------------------
-  # ADDED: Update meta.json with sync status
-  # ---------------------------------------------------------
+  # Update meta.json with sync status
   if [[ $dry_run != "true" ]]; then
     github_pusher_update_meta_json \
       "$meta_file" \

@@ -70,10 +70,14 @@ EOF
     echo "DEBUG: Step 2 - Running github_pusher to update to public..." >&2
   fi
 
+  sleep 2
+
   # Run github_pusher (should update to public)
   local output
   output=$(DEBUG=1 github_pusher "$meta_file" "false" 2>&1)
   local exit_code=$?
+
+  sleep 2
 
   if [[ -n ${DEBUG:-} ]]; then
     echo "DEBUG: github_pusher full output:" >&2
