@@ -31,7 +31,7 @@ github_sync_workflow_process_projects_helper() {
   local meta_file
 
   # Call extraction on the specific project_path
-  meta_file=$(gitHistoryTools_extractGitPath "$project_path" 2>"$stderr_capture")
+  meta_file=$(extract-git-path "$project_path" 2>"$stderr_capture")
   local extract_exit_code=$?
 
   if [[ $extract_exit_code -ne 0 ]]; then

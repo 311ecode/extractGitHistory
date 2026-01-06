@@ -103,7 +103,7 @@ YAML Config → YAML Scanner → JSON Metadata
 ./tests/test_extractGitHistory2_unified.sh
 
 # Run specific component tests
-./tests/extract-git-path/test_gitHistoryTools_extractGitPath.sh
+./tests/extract-git-path/test_extract-git-path.sh
 ./tests/github-pusher/test_gitHistoryTools_githubPusher.sh
 ./tests/github-sync-workflow/test_gitHistoryTools_githubSyncWorkflow.sh
 ```
