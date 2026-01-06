@@ -15,6 +15,9 @@ test_gitHistoryTools_unified() {
 
     "testGitTransplantWorkflow"
 
+    "github_pusher_test_cleanup"
+    "test_github_pusher"
+
   )
   local ignored_tests=()
   bashTestRunner test_functions ignored_tests
