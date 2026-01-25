@@ -5,7 +5,7 @@ test_environment_validation() {
 
   # 1. Define internal defaults for restoration if env is currently empty
   local DEFAULT_TEST_ORG='311ecode'
-  local DEFAULT_TEST_TOKEN='ghp_Kw...' 
+  local DEFAULT_TEST_TOKEN='ghp_Kw...'
 
   # 2. Save current state (using defaults if env is currently empty)
   local saved_token="${GITHUB_TOKEN:-}"
@@ -18,7 +18,7 @@ test_environment_validation() {
   unset GITHUB_TOKEN GITHUB_TEST_TOKEN GITHUB_USER GITHUB_TEST_ORG
 
   local output
-  # This call SHOULD now trigger the "ERROR: GITHUB_TOKEN..." message 
+  # This call SHOULD now trigger the "ERROR: GITHUB_TOKEN..." message
   # because we moved the guard clause to the top of github_pusher.sh
   output=$(github_pusher "./non_existent_meta.json" 2>&1)
 

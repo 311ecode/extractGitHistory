@@ -18,7 +18,7 @@ test_gitHistoryTools_githubPusher() {
   )
 
   local ignored_tests=(
-    "test_githubPusher_updateVisibility"  # Flaky due to GitHub API timings sometimes works, sometimes fails
+    "test_githubPusher_updateVisibility" # Flaky due to GitHub API timings sometimes works, sometimes fails
     "test_githubPusher_pagesCustomPath"
     "test_githubPusher_pagesCustomPath"
     "test_githubPusher_enablePages"

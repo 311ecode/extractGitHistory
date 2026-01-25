@@ -11,12 +11,12 @@ github_pusher() {
   local github_user="${GITHUB_TEST_ORG:-${GITHUB_USER}}"
 
   # --- VALIDATION GUARD CLAUSES ---
-  if [[ -z "$github_token" ]]; then
+  if [[ -z $github_token ]]; then
     echo "ERROR: GITHUB_TOKEN or GITHUB_TEST_TOKEN must be set" >&2
     return 1
   fi
 
-  if [[ -z "$github_user" ]]; then
+  if [[ -z $github_user ]]; then
     echo "ERROR: GITHUB_USER or GITHUB_TEST_ORG must be set" >&2
     return 1
   fi
