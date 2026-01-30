@@ -6,8 +6,11 @@ github_sync_discover_projects2() {
   local json_output="$2"
   local github_user="${GITHUB_USER:-$GITHUB_TEST_ORG}"
   local debug="${DEBUG:-false}"
+  
+  # Global override via environment variable
+  local global_force="${FORCE_PUSH:-false}"
 
-  [[ $debug == "true" ]] && echo "DEBUG: [Discovery] Scanning root: $search_root" >&2
+  [[ $debug == "true" ]] && echo "DEBUG: [Discovery] Scanning root: $search_root (Global Force: $global_force)" >&2
 
   echo "[]" > "$json_output"
 
@@ -16,21 +19,19 @@ github_sync_discover_projects2() {
     local project_path="${sidecar_dir%-github-sync.d}"
     
     if [[ ! -d "$project_path" ]]; then
-      [[ $debug == "true" ]] && echo "DEBUG: [Discovery] Skipping $sidecar_dir; $project_path not found." >&2
       continue
     fi
 
-    # Defaults
+    # Default values
     local repo_name=$(basename "$project_path")
     local private="true"
-    local forcePush="false"
+    local forcePush="$global_force"  # Initialize with global env var
     local githubPages="false"
     local githubPagesBranch="main"
     local githubPagesPath="/"
 
-    # Source local overrides
+    # Source local overrides (can override global force if explicitly set in file)
     if [[ -s "$sync_file" ]]; then
-      # Extracting assignments safely
       eval "$(grep -E '^[a-zA-Z_][a-zA-Z0-9_]*=' "$sync_file")"
     fi
 

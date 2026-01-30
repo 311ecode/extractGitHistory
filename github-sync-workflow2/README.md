@@ -1,21 +1,21 @@
 # GitHub Sync Workflow v2 (Sidecar Discovery)
 
-## The Origin & Rational
+## The Origin & Rationale
 The original `github-sync-workflow` relied on a centralized `.github-sync.yaml` file. While effective for small setups, it became a **maintenance bottleneck** in a rapidly evolving monorepo:
 1. **Fragility**: Renaming a folder required a manual update to the central YAML, or the sync would break.
-2. **History Pollution**: Configuration files placed *inside* project folders were accidentally exported to the public GitHub repositories.
-3. **Scalability**: A single master list is a "hot spot" for merge conflicts in a multi-user monorepo.
+2. **History Pollution**: Configuration files placed *inside* project folders were accidentally exported to public GitHub repositories.
+3. **Scalability**: A single master list is a "hot spot" for merge conflicts in a multi-user environment.
 
-**The Solution**: `github-sync-workflow2` introduces **Locality without Pollution**. By using "Sidecar" directories, we keep the sync configuration right next to the code, but technically outside the export path.
+**The Solution**: `github-sync-workflow2` introduces **Locality without Pollution**. By using "Sidecar" directories, we keep the sync configuration right next to the code, but technically outside the extraction path.
 
 ---
 
 ## Architecture: The Sidecar Pattern
 Instead of a central registry, the workflow performs a recursive discovery of project "markers."
 
+
+
 ### Directory Structure
-
-
 ```text
 monorepo/
 ├── util/
@@ -46,18 +46,15 @@ The `sync` file is a simple key-value Bash-compatible file. If the file is empty
 | `githubPagesPath` | `/` | The directory within the repo for Pages (e.g., `/docs`). |
 | `forcePush` | `false` | Overwrites remote history if `true`. |
 
-### Example: High-Magic Config
+---
 
-To sync a public documentation site with GitHub Pages enabled:
+## Global Overrides
 
-```bash
-# util/docs-site-github-sync.d/sync
-repo_name="project-docs"
-private=false
-githubPages=true
-githubPagesBranch="main"
+Sometimes you need to force an update across the entire monorepo (e.g., after a history rewrite or when remote/local histories have diverged). You can use environment variables to override local sidecar settings globally.
 
-```
+| Env Var | Description |
+| --- | --- |
+| `FORCE_PUSH=true` | Forces a push for all discovered projects, regardless of individual sidecar settings. |
 
 ---
 
@@ -72,6 +69,15 @@ github_sync_workflow2 .
 
 ```
 
+### Force Sync (Diverged History)
+
+If you get "rejected" push errors because the remote has diverged:
+
+```bash
+FORCE_PUSH=true github_sync_workflow2 .
+
+```
+
 ### Dry Run
 
 To see what would happen without actually pushing to GitHub:
@@ -83,7 +89,7 @@ github_sync_workflow2 . true
 
 ### Debug Mode
 
-To trace the discovery logic and API payloads:
+To trace the discovery logic and see the dynamic JSON generation:
 
 ```bash
 DEBUG=true github_sync_workflow2 .
@@ -94,7 +100,7 @@ DEBUG=true github_sync_workflow2 .
 
 ## Technical Tally
 
-* **Discovery Engine**: `github_sync_discover_projects2.sh` (Uses `find` and `jq`).
-* **Processing Engine**: Reuses the robust `github_sync_workflow_process_projects` logic from v1.
+* **Discovery Engine**: `github_sync_discover_projects2.sh` (Generates dynamic JSON).
+* **Processing Engine**: Reuses the robust `github_sync_workflow_process_projects` logic.
 * **Requirement**: `jq`, `curl`, and your existing `extract-git-path` tool.
 
