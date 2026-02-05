@@ -33,7 +33,7 @@ github_pusher_update_meta_json() {
     "$meta_file" >"$temp_file"
 
   if [[ $? -eq 0 ]]; then
-    mv "$temp_file" "$meta_file"
+    \mv "$temp_file" "$meta_file"
     if [[ $debug == "true" ]]; then
       echo "DEBUG: Successfully updated meta.json" >&2
     fi

@@ -41,7 +41,7 @@ test_full_integration_dry_run() {
   (
     cd "$workspace" || exit 1
     jq --arg name "$target_name" '.custom_repo_name = $name' "extract-git-path-meta.json" >"meta.tmp"
-    mv "meta.tmp" "extract-git-path-meta.json"
+    \mv "meta.tmp" "extract-git-path-meta.json"
   )
 
   # VERIFICATION: Ensure the file on disk actually has the value

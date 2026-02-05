@@ -46,7 +46,7 @@ github_sync_discover_projects2() {
       --arg githubPagesPath "$githubPagesPath" \
       '{path: $path, repo_name: $repo_name, private: $private, github_user: $github_user, forcePush: $forcePush, githubPages: $githubPages, githubPagesBranch: $githubPagesBranch, githubPagesPath: $githubPagesPath}')
 
-    jq ". += [$project_json]" "$json_output" > "${json_output}.tmp" && mv "${json_output}.tmp" "$json_output"
+    jq ". += [$project_json]" "$json_output" > "${json_output}.tmp" && \mv "${json_output}.tmp" "$json_output"
 
   done < <(find "$search_root" -type d -name "*-github-sync.d" -exec test -f "{}/sync" \; -print | sed 's|$|/sync|')
 }
