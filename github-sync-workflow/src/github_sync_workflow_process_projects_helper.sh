@@ -57,7 +57,7 @@ github_sync_workflow_process_projects_helper() {
         .custom_githubPagesBranch = $githubPagesBranch |
         .custom_githubPagesPath = $githubPagesPath' \
     "$meta_file" >"$temp_meta"
-  mv "$temp_meta" "$meta_file"
+  \mv "$temp_meta" "$meta_file"
 
   if [[ $debug == "true" ]]; then
     echo "DEBUG: [META_INJECTED] Meta file: $meta_file" >&2
