@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Date: 2026-02-06
+# Date: 2026-03-04
 
 github_sync_discover_projects2() {
   local search_root="${1:-.}"
@@ -42,6 +42,22 @@ github_sync_discover_projects2() {
     if [[ -s "$sync_file" ]]; then
       eval "$(grep -E '^[a-zA-Z_][a-zA-Z0-9_]*=' "$sync_file")"
     fi
+
+    # --- PACKAGESH INTEGRATION HOOK ---
+    for pub_script in "$sidecar_dir"/publish_*.sh; do
+      if [[ -f "$pub_script" ]]; then
+        [[ $debug == "true" ]] && echo "DEBUG: [Discovery] Found publisher: $pub_script" >&2
+        (
+          export PACKAGESH_REPO_NAME_OVERRIDE="$repo_name"
+          source "$pub_script"
+          local fn_name=$(basename "$pub_script" .sh)
+          if command -v "$fn_name" &>/dev/null; then
+             "$fn_name"
+          fi
+        )
+      fi
+    done
+    # ----------------------------------
 
     local project_json=$(jq -n \
       --arg path "$project_path" \

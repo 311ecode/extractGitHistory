@@ -13,13 +13,11 @@ The original `github-sync-workflow` relied on a centralized `.github-sync.yaml` 
 ## Architecture: The Sidecar Pattern
 Instead of a central registry, the workflow performs a recursive discovery of project "markers."
 
-
-
 ### Directory Structure
 ```text
 monorepo/
 ├── util/
-│   ├── memoize/                 <-- The "Origin" Project (Pure Code)
+│   ├── memoize/                <-- The "Origin" Project (Pure Code)
 │   └── memoize-github-sync.d/   <-- The "Sidecar" (Metadata)
 │       └── sync                 <-- The Marker File
 
@@ -103,4 +101,3 @@ DEBUG=true github_sync_workflow2 .
 * **Discovery Engine**: `github_sync_discover_projects2.sh` (Generates dynamic JSON).
 * **Processing Engine**: Reuses the robust `github_sync_workflow_process_projects` logic.
 * **Requirement**: `jq`, `curl`, and your existing `extract-git-path` tool.
-

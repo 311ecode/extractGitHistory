@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Date: 2026-01-30
+# Date: 2026-03-04
 
 test_githubSyncWorkflow2_discovery() {
   echo "Testing project discovery via sidecar markers..."
@@ -48,6 +48,54 @@ EOF
   fi
 
   echo "SUCCESS: Discovery correctly identified sidecars and parsed configs."
+  rm -rf "$test_root"
+  return 0
+}
+
+test_githubSyncWorkflow2_packagesh_hook() {
+  echo "Testing packagesh hook execution and variable injection..."
+
+  local test_root=$(mktemp -d)
+  local json_out="$test_root/output.json"
+  local hook_out="$test_root/hook_output.txt"
+
+  # Setup Mock Monorepo with a Sidecar and Publish Script
+  mkdir -p "$test_root/src/my-internal-tool"
+  mkdir -p "$test_root/src/my-internal-tool-github-sync.d"
+  
+  # Create sync file with repo_name override
+  cat > "$test_root/src/my-internal-tool-github-sync.d/sync" <<EOF
+repo_name="public-awesome-tool"
+EOF
+
+  # Create mock publish script matching the hook expectations
+  cat > "$test_root/src/my-internal-tool-github-sync.d/publish_my_internal_tool.sh" <<EOF
+publish_my_internal_tool() {
+    echo "HOOK_TRIGGERED_WITH: \$PACKAGESH_REPO_NAME_OVERRIDE" > "$hook_out"
+}
+EOF
+  chmod +x "$test_root/src/my-internal-tool-github-sync.d/publish_my_internal_tool.sh"
+
+  # Run discovery
+  github_sync_discover_projects2 "$test_root" "$json_out" "false"
+
+  # Assertions
+  if [[ ! -f "$hook_out" ]]; then
+    echo "ERROR: Hook script was not executed by discovery engine." >&2
+    rm -rf "$test_root"
+    return 1
+  fi
+
+  local hook_result
+  hook_result=$(cat "$hook_out")
+  
+  if [[ "$hook_result" != "HOOK_TRIGGERED_WITH: public-awesome-tool" ]]; then
+    echo "ERROR: Variable injection failed or mismatched. Output: $hook_result" >&2
+    rm -rf "$test_root"
+    return 1
+  fi
+
+  echo "SUCCESS: Hook triggered and PACKAGESH_REPO_NAME_OVERRIDE injected correctly."
   rm -rf "$test_root"
   return 0
 }
